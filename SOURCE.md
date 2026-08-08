@@ -1,6 +1,6 @@
 # ACCELA source baseline
 
-The current upstream installer ships ACCELA inside `deps.tar.gz`, and that archive now exists primarily to carry `bin/ACCELA.AppImage` plus installer assets. For development, this branch is moving away from that opaque release layout.
+The current upstream installer ships ACCELA inside `deps.tar.gz`, and that archive now exists primarily to carry `bin/ACCELA.AppImage` plus installer assets. The `dev` branch is moving away from that opaque release layout.
 
 ## Source baseline
 
@@ -12,12 +12,32 @@ Editable source is synchronized from the May 12, 2026 ACCELA-era source snapshot
 
 That snapshot was chosen because it was created directly from the 2026-05-12 ACCELA source and predates the later ASSella beta development.
 
-Run:
+Materialize it once in a checkout:
 
 ```bash
 ./tools/sync-accela-source.sh
+```
+
+Then inspect exactly which third-party Python modules the source imports:
+
+```bash
 python3 ./tools/audit-python-imports.py
 ```
+
+## Lean source mode
+
+`./accela` now prefers editable source mode whenever `accela-src/src/main.py` exists. In source mode it does not download `deps.tar.gz` or the AppImage.
+
+The bootstrap creates a repository-local `.venv`, converts detected import names to pip package names, installs only those detected packages, and creates a launcher at `~/.local/bin/accela-dev`.
+
+You can also run the pieces directly:
+
+```bash
+./tools/bootstrap-accela-source.sh
+./tools/run-accela-source.sh
+```
+
+Changes made under `accela-src/src` are used immediately by the source launcher.
 
 ## What we intentionally do not vendor
 
@@ -33,6 +53,8 @@ The source sync excludes packaged/runtime payloads rather than checking large op
 
 The goal is to keep the repository centered on editable application code and make dependencies explicit rather than burying them inside an AppImage.
 
-## Next packaging step
+## Legacy fallback
 
-Once the imported source has been audited, the `accela` installer can be changed to install the source tree into `~/.local/share/ACCELA`, create a small isolated Python environment, install only the dependencies actually imported by the application, and launch `src/main.py` through a stable wrapper. The existing AppImage path can remain as a temporary fallback until that source install is validated.
+Until `accela-src` is committed to the branch, a curl-only install has no source tree available and `accela` falls back to the existing AppImage package. Set `ACCELA_FORCE_APPIMAGE=1` to deliberately test that path from a source checkout.
+
+Once the source tree is committed, we can remove that fallback after validating the source build on desktop Linux and Steam Deck/Game Mode.
