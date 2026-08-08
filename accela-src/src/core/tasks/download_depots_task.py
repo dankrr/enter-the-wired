@@ -18,8 +18,8 @@ from utils.settings import get_settings
 try:
     import psutil
 except ImportError:
-    logging.critical(
-        "Failed to import 'psutil'. Pausing/resuming downloads will not work."
+    logging.info(
+        "Optional process support is unavailable; pausing/resuming downloads is disabled."
     )
     psutil = None
 
@@ -65,7 +65,6 @@ class DownloadDepotsTask(QObject):
         current_cmd: Optional[List[str]] = None
 
         try:
-            # Check for .NET 9 availability before proceeding (will attempt auto-install if missing)
             self.progress.emit("Checking .NET 9 runtime availability...")
             if not ensure_dotnet_availability():
                 self.progress.emit(
@@ -99,9 +98,7 @@ class DownloadDepotsTask(QObject):
                     logger.info("Download task stopping before next depot.")
                     break
 
-                depot_id = current_cmd[
-                    5
-                ]  # 'dotnet', 'dll', '-app', 'id', '-depot', 'id'
+                depot_id = current_cmd[5]
                 self.current_depot_size = depot_sizes[i]
 
                 self.progress.emit(
@@ -110,24 +107,19 @@ class DownloadDepotsTask(QObject):
                 )
                 self.last_percentage = -1
 
-                # Determine creation flags for Windows to hide the console window
                 creation_flags = 0
                 if sys.platform == "win32":
                     creation_flags = subprocess.CREATE_NO_WINDOW
 
-                # Use binary mode to handle \r correctly
                 self.process = subprocess.Popen(
                     current_cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
-                    text=False,  # Binary mode
+                    text=False,
                     creationflags=creation_flags,
                 )
 
-                # Read output directly in this thread
                 self._read_process_output()
-
-                # Flush any remaining logs
                 self._flush_log_buffer()
 
                 if not self._is_running:
@@ -194,15 +186,12 @@ class DownloadDepotsTask(QObject):
 
         buffer = bytearray()
         while self._is_running:
-            # Check if process is None before reading
             if self.process is None:
                 break
 
-            # Read small chunks to be responsive
             chunk = self.process.stdout.read(1)
 
             if not chunk:
-                # Check if process is None before polling
                 if self.process and self.process.poll() is not None:
                     break
                 time.sleep(0.01)
@@ -219,7 +208,6 @@ class DownloadDepotsTask(QObject):
             else:
                 buffer.extend(chunk)
 
-        # Process remaining buffer
         if buffer:
             try:
                 line = buffer.decode("utf-8", errors="replace")
@@ -251,8 +239,6 @@ class DownloadDepotsTask(QObject):
     def _flush_log_buffer(self):
         """Emits any buffered log lines."""
         if self._log_buffer:
-            # Join buffered lines and emit as a single signal
-            # This reduces the number of signals sent to the main thread
             combined_log = "\n".join(self._log_buffer)
             self.progress.emit(combined_log)
             self._log_buffer.clear()
@@ -267,10 +253,8 @@ class DownloadDepotsTask(QObject):
         if not line:
             return
 
-        # Add to buffer
         self._log_buffer.append(line)
 
-        # Check for percentage update
         match = self.percentage_regex.search(line)
         if match:
             try:
@@ -303,11 +287,9 @@ class DownloadDepotsTask(QObject):
             except ValueError:
                 pass
 
-        # Check if we should flush the buffer
         is_important = "error" in line.lower() or "warning" in line.lower()
         current_time = time.time()
 
-        # Flush if important message or time interval passed (80ms)
         if is_important or (current_time - self._last_log_time > 0.08):
             self._flush_log_buffer()
 
@@ -342,8 +324,6 @@ class DownloadDepotsTask(QObject):
         os.makedirs(download_dir, exist_ok=True)
         self.progress.emit(f"Download destination set to: {download_dir}")
 
-        # Use dotnet to run the .NET 9 DLL (multiplatform, like Steamless)
-        # Get the full path to dotnet, checking both PATH and default install location
         dotnet_path = get_dotnet_path()
         if not dotnet_path:
             raise RuntimeError(
@@ -352,7 +332,6 @@ class DownloadDepotsTask(QObject):
         dotnet_cmd = dotnet_path
         dll_path = resource_path(os.path.join("deps", "DepotDownloader.dll"))
 
-        # Get max downloads from settings
         settings = get_settings()
         max_downloads = settings.value("max_downloads", 20, type=int)
 
