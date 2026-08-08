@@ -17,3 +17,8 @@ ACCELA-*-linux*.tar.gz
 
 # Local development output.
 accela-src/UPSTREAM_SOURCE.local
+accela-src/requirements.detected.txt
+accela-src/requirements.optional.txt
+accela-src/requirements.audio.txt
+accela-src/requirements.media.txt
+accela-src/requirements.steam.txt
