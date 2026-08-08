@@ -11,7 +11,6 @@ SOURCE_REPO="https://github.com/niwia/ASSella.git"
 SOURCE_COMMIT="9a11c5f65da038fa31f2d18189766405994ea2e5"
 
 command -v git >/dev/null || { echo "git is required" >&2; exit 1; }
-command -v rsync >/dev/null || { echo "rsync is required" >&2; exit 1; }
 
 rm -rf "$CACHE"
 mkdir -p "$(dirname "$CACHE")" "$DEST"
@@ -23,11 +22,13 @@ git -C "$CACHE" checkout --quiet "$SOURCE_COMMIT"
 
 rm -rf "$DEST/src"
 mkdir -p "$DEST/src"
-rsync -a --delete \
-  --exclude '__pycache__/' \
-  --exclude '*.pyc' \
-  --exclude 'deps/' \
-  "$CACHE/src/" "$DEST/src/"
+cp -a "$CACHE/src/." "$DEST/src/"
+
+# Keep the editable application source/resources; drop bundled runtime payloads
+# and generated Python files so the working tree stays lean.
+rm -rf "$DEST/src/deps"
+find "$DEST/src" -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+find "$DEST/src" -type f -name '*.pyc' -delete 2>/dev/null || true
 
 cat > "$DEST/UPSTREAM_SOURCE" <<EOF
 repository=$SOURCE_REPO
