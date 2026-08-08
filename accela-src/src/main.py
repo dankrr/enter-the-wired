@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer, QMetaObject, Qt, Q_ARG
 from ui.main_window import MainWindow
 from ui.theme import update_appearance
-from managers.cli_manager import run_cli_mode, open_cli_terminal
 from utils.logger import setup_logging
 from utils.settings import get_settings
 from utils.yaml_config_manager import (
@@ -136,6 +135,17 @@ def main():
     # CLI Mode Execution
     # -------------------------------------------------------------------------
     if cli_mode and (command_line_zips or command_line_appid):
+        try:
+            from managers.cli_manager import run_cli_mode, open_cli_terminal
+        except ModuleNotFoundError as exc:
+            if exc.name == "urwid":
+                logger.error(
+                    "CLI mode requires optional CLI support. "
+                    "Run ACCELA_EXTRAS=cli ./accela to enable it."
+                )
+                return None
+            raise
+
         if cli_mode and sys.platform == "linux":
             if command_line_appid:
                 logger.info(
