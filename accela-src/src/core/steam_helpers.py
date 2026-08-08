@@ -2,8 +2,12 @@ import logging
 import os
 import sys
 import re
-import psutil
 import subprocess
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +67,7 @@ def parse_library_folders(vdf_path):
     try:
         with open(vdf_path, "r", encoding="utf-8") as f:
             content = f.read()
-        matches = re.findall(r"^\s*\"(?:path|\d+)\"\s*\"(.*?)\"", content, re.MULTILINE)
+        matches = re.findall(r'^\s*"(?:path|\d+)"\s*"(.*?)"', content, re.MULTILINE)
         for path in matches:
             normalized_path = path.replace("\\\\", "\\")
             if os.path.isdir(os.path.join(normalized_path, "steamapps")):
@@ -93,6 +97,13 @@ def kill_steam_process():
     global _slssteam_so_path_cache, _library_inject_so_path_cache
     _slssteam_so_path_cache = None
     _library_inject_so_path_cache = None
+
+    if psutil is None:
+        logger.warning(
+            "Steam process control requires the optional process extra. "
+            "Run ACCELA_EXTRAS=process ./accela to enable it."
+        )
+        return False
 
     process_name = "steam.exe" if sys.platform == "win32" else "steam"
     steam_proc = next(
