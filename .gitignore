@@ -19,3 +19,4 @@ ACCELA-*-linux*.tar.gz
 accela-src/UPSTREAM_SOURCE.local
 accela-src/requirements.detected.txt
 accela-src/requirements.optional*.txt
+accela-src/src/deps/
