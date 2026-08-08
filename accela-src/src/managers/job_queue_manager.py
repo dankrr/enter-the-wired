@@ -1,6 +1,8 @@
 import os
 import sys
 import logging
+import signal
+import subprocess
 import time
 import threading
 from PyQt6.QtWidgets import QMessageBox
@@ -201,17 +203,119 @@ class JobQueueManager(QObject):
 
         if reply == QMessageBox.StandardButton.Yes:
             logger.info("User agreed to restart Steam.")
-            # Run heavy lifting in background
             threading.Thread(target=self._perform_steam_restart, daemon=True).start()
+
+    @staticmethod
+    def _linux_steam_pids():
+        """Find Steam client PIDs without requiring psutil."""
+        pids = []
+        try:
+            entries = os.scandir("/proc")
+        except OSError:
+            return pids
+
+        with entries:
+            for entry in entries:
+                if not entry.name.isdigit():
+                    continue
+                try:
+                    with open(
+                        os.path.join(entry.path, "comm"),
+                        "r",
+                        encoding="utf-8",
+                        errors="ignore",
+                    ) as handle:
+                        if handle.read().strip().lower() == "steam":
+                            pids.append(int(entry.name))
+                except (OSError, ValueError):
+                    continue
+        return pids
+
+    @classmethod
+    def _wait_for_linux_steam_exit(cls, timeout=8.0):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if not cls._linux_steam_pids():
+                return True
+            time.sleep(0.25)
+        return not cls._linux_steam_pids()
+
+    @classmethod
+    def _stop_linux_steam_without_psutil(cls):
+        """Stop Steam using native Linux interfaces when psutil is unavailable."""
+        pids = cls._linux_steam_pids()
+        if not pids:
+            logger.info("Steam is already stopped.")
+            return True
+
+        # Ask Steam to shut down cleanly first so it can flush client state.
+        try:
+            subprocess.run(
+                ["steam", "-shutdown"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            logger.debug("Steam -shutdown was unavailable; falling back to signals.")
+
+        if cls._wait_for_linux_steam_exit(timeout=5.0):
+            logger.info("Steam shut down cleanly.")
+            return True
+
+        pids = cls._linux_steam_pids()
+        logger.info(f"Steam is still running; sending SIGTERM to {len(pids)} process(es).")
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            except OSError as exc:
+                logger.debug(f"Could not terminate Steam PID {pid}: {exc}")
+
+        if cls._wait_for_linux_steam_exit(timeout=4.0):
+            logger.info("Steam stopped after SIGTERM.")
+            return True
+
+        pids = cls._linux_steam_pids()
+        logger.warning(f"Steam is still running; forcing {len(pids)} process(es) to exit.")
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except OSError as exc:
+                logger.debug(f"Could not kill Steam PID {pid}: {exc}")
+
+        stopped = cls._wait_for_linux_steam_exit(timeout=3.0)
+        if stopped:
+            logger.info("Steam was stopped successfully.")
+        return stopped
 
     def _perform_steam_restart(self):
         """Execute Steam restart logic in background thread"""
         try:
             if sys.platform == "linux":
-                logger.info("Attempting to kill Steam process...")
-                steam_helpers.kill_steam_process()
-                time.sleep(1)
+                logger.info("Attempting to stop Steam...")
 
+                if getattr(steam_helpers, "psutil", None) is not None:
+                    stopped = steam_helpers.kill_steam_process()
+                    if not stopped:
+                        stopped = self._stop_linux_steam_without_psutil()
+                else:
+                    stopped = self._stop_linux_steam_without_psutil()
+
+                if not stopped:
+                    logger.warning("Could not stop Steam; aborting automatic restart.")
+                    self._show_message_safe(
+                        "Restart Failed",
+                        "Could not stop Steam. Please restart it manually.",
+                    )
+                    return
+
+                # Do not relaunch until the old client has actually exited.
+                time.sleep(0.5)
                 result = steam_helpers.start_steam()
 
                 if result == "NEEDS_USER_PATH":
@@ -221,7 +325,7 @@ class JobQueueManager(QObject):
                         Qt.ConnectionType.QueuedConnection,
                     )
                 elif result == "SUCCESS":
-                    logger.info("Steam started successfully with cached libraries.")
+                    logger.info("Steam restarted successfully.")
                 else:
                     logger.warning("Failed to start Steam.")
                     self._show_message_safe(
@@ -230,7 +334,6 @@ class JobQueueManager(QObject):
                     )
 
             else:
-                # Windows
                 steam_path = steam_helpers.find_steam_install()
                 if steam_path:
                     logger.info("Closing Steam...")
@@ -270,7 +373,7 @@ class JobQueueManager(QObject):
                     )
 
         except Exception as e:
-            logger.error(f"Error during Steam restart: {e}")
+            logger.error(f"Error during Steam restart: {e}", exc_info=True)
 
     @staticmethod
     def _show_message_safe(title, text):
