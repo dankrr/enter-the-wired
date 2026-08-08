@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ACCELA Installation Script
-# Part of Enter The Wired project
+# ACCELA installer / development launcher
+# Part of Enter The Wired
 
-# Colors (disabled if not interactive terminal)
 if [ -t 1 ] && [ -t 0 ]; then
     GREEN='\033[0;32m'
     RED='\033[0;31m'
@@ -17,12 +16,13 @@ else
     NC=''
 fi
 
-# Configuration
-DOWNLOAD_URL="https://github.com/ciscosweater/enter-the-wired/releases/download/latest/deps.tar.gz"
-INSTALL_DIR="$HOME/.local/share/ACCELA"
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+INSTALL_DIR="$HOME/.local/share/ACCELA"
+SOURCE_DIR="$SCRIPT_DIR/accela-src/src"
+SOURCE_BOOTSTRAP="$SCRIPT_DIR/tools/bootstrap-accela-source.sh"
+SOURCE_RUNNER="$SCRIPT_DIR/tools/run-accela-source.sh"
+LEGACY_DOWNLOAD_URL="${ACCELA_LEGACY_URL:-https://github.com/ciscosweater/enter-the-wired/releases/download/latest/deps.tar.gz}"
 
-# Ensure ACCELA.conf has required [General] fields
 ensure_accela_conf_general() {
     local CONF_PATH="$HOME/.config/Tachibana Labs/ACCELA.conf"
     local CONF_DIR
@@ -35,7 +35,7 @@ ensure_accela_conf_general() {
     fi
 
     if [ ! -f "$CONF_PATH" ]; then
-        if ! cat > "$CONF_PATH" <<'EOF'
+        cat > "$CONF_PATH" <<'EOF' || return 0
 [General]
 auto_skip_single_choice=true
 library_mode=true
@@ -44,18 +44,10 @@ sls_config_management=true
 slssteam_mode=true
 use_steamless=true
 EOF
-        then
-            echo -e "${YELLOW}[WARN] Could not write config file: $CONF_PATH${NC}" >&2
-            return 0
-        fi
         return 0
     fi
 
     TMP_FILE="$(mktemp)"
-    if [ -z "$TMP_FILE" ] || [ ! -f "$TMP_FILE" ]; then
-        echo -e "${YELLOW}[WARN] Could not create temporary file for config update.${NC}" >&2
-        return 0
-    fi
     trap 'rm -f "${TMP_FILE:-}"; trap - RETURN' RETURN
 
     if ! awk '
@@ -69,7 +61,6 @@ BEGIN {
     saw_slssteam_mode = 0
     saw_use_steamless = 0
 }
-
 function print_required_missing() {
     if (!saw_auto_skip_single_choice) print "auto_skip_single_choice=true"
     if (!saw_library_mode) print "library_mode=true"
@@ -78,13 +69,11 @@ function print_required_missing() {
     if (!saw_slssteam_mode) print "slssteam_mode=true"
     if (!saw_use_steamless) print "use_steamless=true"
 }
-
 /^\[[^]]+\]$/ {
     if (in_general) {
         print_required_missing()
         in_general = 0
     }
-
     if ($0 == "[General]") {
         saw_general = 1
         in_general = 1
@@ -95,64 +84,47 @@ function print_required_missing() {
         saw_slssteam_mode = 0
         saw_use_steamless = 0
     }
-
     print $0
     next
 }
-
 {
     if (in_general) {
         if ($0 ~ /^auto_skip_single_choice[[:space:]]*=/) {
-            if (!saw_auto_skip_single_choice) {
-                print "auto_skip_single_choice=true"
-                saw_auto_skip_single_choice = 1
-            }
+            if (!saw_auto_skip_single_choice) print "auto_skip_single_choice=true"
+            saw_auto_skip_single_choice = 1
             next
         }
         if ($0 ~ /^library_mode[[:space:]]*=/) {
-            if (!saw_library_mode) {
-                print "library_mode=true"
-                saw_library_mode = 1
-            }
+            if (!saw_library_mode) print "library_mode=true"
+            saw_library_mode = 1
             next
         }
         if ($0 ~ /^max_downloads[[:space:]]*=/) {
-            if (!saw_max_downloads) {
-                print "max_downloads=16"
-                saw_max_downloads = 1
-            }
+            if (!saw_max_downloads) print "max_downloads=16"
+            saw_max_downloads = 1
             next
         }
         if ($0 ~ /^sls_config_management[[:space:]]*=/) {
-            if (!saw_sls_config_management) {
-                print "sls_config_management=true"
-                saw_sls_config_management = 1
-            }
+            if (!saw_sls_config_management) print "sls_config_management=true"
+            saw_sls_config_management = 1
             next
         }
         if ($0 ~ /^slssteam_mode[[:space:]]*=/) {
-            if (!saw_slssteam_mode) {
-                print "slssteam_mode=true"
-                saw_slssteam_mode = 1
-            }
+            if (!saw_slssteam_mode) print "slssteam_mode=true"
+            saw_slssteam_mode = 1
             next
         }
         if ($0 ~ /^use_steamless[[:space:]]*=/) {
-            if (!saw_use_steamless) {
-                print "use_steamless=true"
-                saw_use_steamless = 1
-            }
+            if (!saw_use_steamless) print "use_steamless=true"
+            saw_use_steamless = 1
             next
         }
     }
-
     print $0
 }
-
 END {
-    if (in_general) {
-        print_required_missing()
-    } else if (!saw_general) {
+    if (in_general) print_required_missing()
+    else if (!saw_general) {
         print ""
         print "[General]"
         print "auto_skip_single_choice=true"
@@ -169,103 +141,103 @@ END {
         return 0
     fi
 
-    if ! mv "$TMP_FILE" "$CONF_PATH" 2>/dev/null; then
+    mv "$TMP_FILE" "$CONF_PATH" 2>/dev/null || {
         rm -f "$TMP_FILE" 2>/dev/null
         echo -e "${YELLOW}[WARN] Could not update config file: $CONF_PATH${NC}" >&2
         return 0
+    }
+}
+
+install_source_dev() {
+    echo -e "${GREEN}Editable ACCELA source detected.${NC}"
+    echo "Using source mode; deps.tar.gz/AppImage will not be downloaded."
+
+    if [ ! -x "$SOURCE_BOOTSTRAP" ]; then
+        chmod +x "$SOURCE_BOOTSTRAP" "$SOURCE_RUNNER" 2>/dev/null || true
     fi
 
-    return 0
+    if [ ! -x "$SOURCE_BOOTSTRAP" ] || [ ! -x "$SOURCE_RUNNER" ]; then
+        echo -e "${RED}Source development helpers are missing.${NC}" >&2
+        return 1
+    fi
+
+    "$SOURCE_BOOTSTRAP"
+    ensure_accela_conf_general
+
+    mkdir -p "$HOME/.local/bin"
+    ln -sfn "$SOURCE_RUNNER" "$HOME/.local/bin/accela-dev"
+
+    echo
+    echo -e "${GREEN}[INFO] ACCELA source environment is ready.${NC}"
+    echo "Edit: $SOURCE_DIR"
+    echo "Run:  ~/.local/bin/accela-dev"
 }
 
 find_local_archive() {
     find "$SCRIPT_DIR" -maxdepth 1 -name "deps*.tar.gz" -type f 2>/dev/null | sort | tail -n 1 || true
 }
 
-# Install ACCELA
-install_accela() {
-    echo -e "${GREEN}Installing ACCELA...${NC}"
-    echo ""
+install_legacy_appimage() {
+    local TEMP_DIR TEMP_ARCHIVE EXTRACT_DIR LOCAL_ARCHIVE
 
-    local TEMP_DIR
-    local TEMP_ARCHIVE
-    local EXTRACT_DIR
-    local LOCAL_ARCHIVE=""
+    echo -e "${YELLOW}Editable source is not materialized yet; using legacy AppImage fallback.${NC}"
+    echo "Run ./tools/sync-accela-source.sh in a checkout to switch to source mode."
+    echo
 
     TEMP_DIR="$(mktemp -d)"
     TEMP_ARCHIVE="$TEMP_DIR/accela.tar.gz"
     EXTRACT_DIR="$TEMP_DIR/extracted"
-
     LOCAL_ARCHIVE="$(find_local_archive)"
+    trap 'rm -rf "$TEMP_DIR"' RETURN
 
     if [ -n "$LOCAL_ARCHIVE" ]; then
         echo "Using local archive: $LOCAL_ARCHIVE"
         cp "$LOCAL_ARCHIVE" "$TEMP_ARCHIVE"
     else
-        echo "Downloading ACCELA..."
-        if ! curl -fsSL --retry 3 --retry-delay 2 -o "$TEMP_ARCHIVE" "$DOWNLOAD_URL"; then
+        echo "Downloading legacy ACCELA package..."
+        if ! curl -fsSL --retry 3 --retry-delay 2 -o "$TEMP_ARCHIVE" "$LEGACY_DOWNLOAD_URL"; then
             echo -e "${RED}Download error. Check URL or connection.${NC}"
-            rm -rf "$TEMP_DIR"
             return 1
         fi
     fi
 
-    if [ ! -f "$TEMP_ARCHIVE" ]; then
-        echo -e "${RED}Error: Download failed or file is empty.${NC}"
-        rm -rf "$TEMP_DIR"
+    local FILE_SIZE
+    FILE_SIZE=$(stat -c%s "$TEMP_ARCHIVE" 2>/dev/null || stat -f%z "$TEMP_ARCHIVE" 2>/dev/null || echo 0)
+    if [ ! -f "$TEMP_ARCHIVE" ] || [ "$FILE_SIZE" -lt 1024 ]; then
+        echo -e "${RED}Downloaded package is missing or invalid.${NC}"
         return 1
     fi
 
-    local FILE_SIZE=$(stat -c%s "$TEMP_ARCHIVE" 2>/dev/null || stat -f%z "$TEMP_ARCHIVE" 2>/dev/null || echo 0)
-    if [ "$FILE_SIZE" -lt 1024 ]; then
-        echo -e "${RED}Error: Downloaded file is too small (corrupted).${NC}"
-        rm -rf "$TEMP_DIR"
-        return 1
-    fi
-
-    mkdir -p "$INSTALL_DIR"
-
-    # Clean up any previous installation in INSTALL_DIR
-    rm -rf "$INSTALL_DIR"/*
-
-    echo "Extracting archive..."
     mkdir -p "$EXTRACT_DIR"
-    if ! tar -xzf "$TEMP_ARCHIVE" -C "$EXTRACT_DIR"; then
-        echo -e "${RED}Error extracting archive. Download may be corrupted.${NC}"
-        rm -rf "$TEMP_DIR"
+    tar -xzf "$TEMP_ARCHIVE" -C "$EXTRACT_DIR" || {
+        echo -e "${RED}Error extracting legacy package.${NC}"
+        return 1
+    }
+
+    if [ ! -f "$EXTRACT_DIR/ACCELAINSTALL" ]; then
+        echo -e "${RED}ACCELAINSTALL not found in legacy package.${NC}"
         return 1
     fi
 
-    if [ ! -d "$EXTRACT_DIR" ]; then
-        echo -e "${RED}Error: Could not access temporary extraction directory${NC}"
-        rm -rf "$TEMP_DIR"
+    chmod +x "$EXTRACT_DIR/ACCELAINSTALL"
+    (cd "$EXTRACT_DIR" && ./ACCELAINSTALL) || {
+        echo -e "${RED}Error running legacy ACCELAINSTALL.${NC}"
         return 1
-    fi
+    }
 
-    echo "Making installer executable..."
-    if [ -f "$EXTRACT_DIR/ACCELAINSTALL" ]; then
-        chmod +x "$EXTRACT_DIR/ACCELAINSTALL"
+    ensure_accela_conf_general
+    echo -e "${GREEN}[INFO] Legacy ACCELA installed successfully.${NC}"
+}
 
-        echo -e "${GREEN}Running ACCELAINSTALL...${NC}"
-        if ! (cd "$EXTRACT_DIR" && ./ACCELAINSTALL); then
-            echo -e "${RED}Error running ACCELAINSTALL.${NC}"
-            rm -rf "$TEMP_DIR"
-            return 1
-        fi
-        ensure_accela_conf_general
+install_accela() {
+    echo -e "${GREEN}Installing ACCELA...${NC}"
+    echo
+
+    if [ "${ACCELA_FORCE_APPIMAGE:-0}" != "1" ] && [ -f "$SOURCE_DIR/main.py" ]; then
+        install_source_dev
     else
-        echo -e "${RED}Error: 'ACCELAINSTALL' not found in extracted folder.${NC}"
-        ls -la "$EXTRACT_DIR"
-        rm -rf "$TEMP_DIR"
-        return 1
+        install_legacy_appimage
     fi
-
-    # Clean up installer directory
-    echo "Cleaning up temporary files..."
-    rm -rf "$TEMP_DIR"
-
-    echo -e "${GREEN}[INFO] ACCELA installed successfully!${NC}"
-    return 0
 }
 
 install_accela "$@"
