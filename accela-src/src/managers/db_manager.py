@@ -102,9 +102,9 @@ class DatabaseManager:
             return
 
         if zstd is None:
-            logger.critical(
-                "Module 'zstandard' is missing! Database functionality will be limited. "
-                "Please 'pip install zstandard'"
+            logger.info(
+                "Optional database compression is unavailable; compressed depot cache "
+                "reads and writes are disabled."
             )
 
         self.db_path = _setup_database_path()
@@ -135,7 +135,6 @@ class DatabaseManager:
 
         try:
             with self._conn_lock:
-                # Ensure safe type for DB query
                 safe_appid = str(appid).strip()
 
                 cur = self.conn.cursor()
@@ -212,7 +211,6 @@ class DatabaseManager:
         if not blob:
             return {}
         try:
-            # Guard with lock; zstd contexts are not thread-safe.
             with self._conn_lock:
                 decompressed = self.dctx.decompress(blob)
                 return json.loads(decompressed)
