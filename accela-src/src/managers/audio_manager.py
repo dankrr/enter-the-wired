@@ -1,8 +1,8 @@
+import importlib
 import os
 import logging
 import time
 from PyQt6.QtWidgets import QApplication
-from just_playback import Playback
 
 from utils.paths import Paths
 from utils.settings import get_settings
@@ -24,7 +24,8 @@ class AudioManager:
         self.open_playback = None
         self.close_playback = None
         self.loop_playback = None
-        self.audio_available = True
+        self.audio_available = False
+        self._playback_class = None
 
         # Store current preview values
         self.preview_master_volume = self.settings.value("master_volume", 80, type=int)
@@ -34,6 +35,24 @@ class AudioManager:
         self.preview_hum_volume = self.settings.value("hum_volume", 20, type=int)
 
         self.setup_sounds()
+
+    def _load_playback_class(self):
+        """Load optional audio support only when audio is actually initialized."""
+        if self._playback_class is not None:
+            return self._playback_class
+
+        try:
+            module = importlib.import_module("just_playback")
+            self._playback_class = module.Playback
+            self.audio_available = True
+            return self._playback_class
+        except (ImportError, AttributeError) as exc:
+            self.audio_available = False
+            logger.info(
+                "Optional audio support is unavailable; continuing without UI sounds (%s)",
+                exc,
+            )
+            return None
 
     @staticmethod
     def apply_volume(volume_slider_value):
@@ -79,13 +98,12 @@ class AudioManager:
         """Setup all audio effects with volume control"""
         logger.debug("Setting up audio sounds...")
 
-        # Deprecated (To be replaced if needed, used QT before which fails on SteamDeck and similar.)
-        # Check for audio devices first
-        # if not self.check_audio_devices():
-        #     logger.warning("Audio setup aborted - no audio devices available")
-        #     self.open_playback = self.close_playback = self.loop_playback = None
-        #     self.audio_available = False
-        #     return
+        Playback = self._load_playback_class()
+        if Playback is None:
+            self.open_playback = None
+            self.close_playback = None
+            self.loop_playback = None
+            return
 
         # Validate audio files
         if not self.validate_audio_files():
@@ -157,6 +175,7 @@ class AudioManager:
             self.open_playback = None
             self.close_playback = None
             self.loop_playback = None
+            self.audio_available = False
 
     def _resolve_sound_path(self, filename: str):
         """Resolve sound path, preferring Sonic overrides when enabled."""
@@ -235,10 +254,6 @@ class AudioManager:
         Apply preview volumes for all three sliders at once.
         This is called whenever any volume slider moves.
         """
-        # logger.debug(
-        #     f"Preview volumes - Master: {master}, Effects: {effects}, Hum: {hum}"
-        # )
-
         if not self.audio_available:
             logger.debug("Audio not available, skipping preview volume application")
             return
@@ -315,7 +330,8 @@ class AudioManager:
 
             case self.SOUND_LOOP:
                 playback = self.loop_playback
-                playback.loop_at_end(True)
+                if playback:
+                    playback.loop_at_end(True)
                 if preview:
                     master = self.preview_master_volume
                     secondary = self.preview_hum_volume
