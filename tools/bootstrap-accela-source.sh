@@ -28,7 +28,7 @@ fi
 mapfile -t imports < <(python3 "$ROOT/tools/audit-python-imports.py")
 
 : > "$CORE_REQ"
-: > "$AUDIO_REQ"
+printf '%s\n' "just-playback" > "$AUDIO_REQ"
 : > "$MEDIA_REQ"
 : > "$STEAM_REQ"
 : > "$CLI_REQ"
@@ -63,8 +63,8 @@ for module in "${imports[@]}"; do
             ;;
 
         just_playback)
-            package="just-playback"
-            group="audio"
+            # Dynamically imported by audio_manager; seeded above.
+            continue
             ;;
 
         PIL)
