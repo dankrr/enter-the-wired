@@ -46,7 +46,10 @@ for module in "${imports[@]}"; do
         PyQt6) package="PyQt6" ;;
         bs4) package="beautifulsoup4" ;;
         requests) package="requests" ;;
-        urllib3) package="urllib3" ;;
+        urllib3)
+            # requests already installs urllib3; avoid duplicating it as a direct requirement.
+            continue
+            ;;
         configobj) package="configobj" ;;
         cryptography) package="cryptography" ;;
         yaml) package="PyYAML" ;;
