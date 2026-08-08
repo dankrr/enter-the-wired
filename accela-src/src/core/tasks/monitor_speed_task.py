@@ -1,7 +1,12 @@
 import logging
 import time
-import psutil
+
 from PyQt6.QtCore import QObject, pyqtSignal
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +20,10 @@ class SpeedMonitorTask(QObject):
         self._is_running = True
 
     def run(self):
+        if psutil is None:
+            logger.info("Optional process monitoring is unavailable; download speed display disabled.")
+            return
+
         logger.info("Speed monitor task starting.")
         try:
             last_bytes = psutil.net_io_counters().bytes_recv
