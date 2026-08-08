@@ -20,6 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 INSTALL_DIR="$HOME/.local/share/ACCELA"
 SOURCE_DIR="$SCRIPT_DIR/accela-src/src"
 SOURCE_BOOTSTRAP="$SCRIPT_DIR/tools/bootstrap-accela-source.sh"
+SOURCE_RUNTIME_BOOTSTRAP="$SCRIPT_DIR/tools/bootstrap-accela-runtime.sh"
 SOURCE_RUNNER="$SCRIPT_DIR/tools/run-accela-source.sh"
 LEGACY_DOWNLOAD_URL="${ACCELA_LEGACY_URL:-https://github.com/ciscosweater/enter-the-wired/releases/download/latest/deps.tar.gz}"
 
@@ -152,11 +153,12 @@ install_source_dev() {
     echo -e "${GREEN}Editable ACCELA source detected.${NC}"
     echo "Using source mode; deps.tar.gz/AppImage will not be downloaded."
 
-    if [ ! -f "$SOURCE_BOOTSTRAP" ] || [ ! -f "$SOURCE_RUNNER" ]; then
+    if [ ! -f "$SOURCE_BOOTSTRAP" ] || [ ! -f "$SOURCE_RUNTIME_BOOTSTRAP" ] || [ ! -f "$SOURCE_RUNNER" ]; then
         echo -e "${RED}Source development helpers are missing.${NC}" >&2
         return 1
     fi
 
+    bash "$SOURCE_RUNTIME_BOOTSTRAP"
     bash "$SOURCE_BOOTSTRAP"
     ensure_accela_conf_general
 
