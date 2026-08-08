@@ -8,6 +8,7 @@ CORE_REQ="$ROOT/accela-src/requirements.detected.txt"
 AUDIO_REQ="$ROOT/accela-src/requirements.optional-audio.txt"
 MEDIA_REQ="$ROOT/accela-src/requirements.optional-media.txt"
 STEAM_REQ="$ROOT/accela-src/requirements.optional-steam.txt"
+CLI_REQ="$ROOT/accela-src/requirements.optional-cli.txt"
 EXTRAS="${ACCELA_EXTRAS:-}"
 
 if [ ! -f "$SRC/main.py" ]; then
@@ -30,6 +31,7 @@ mapfile -t imports < <(python3 "$ROOT/tools/audit-python-imports.py")
 : > "$AUDIO_REQ"
 : > "$MEDIA_REQ"
 : > "$STEAM_REQ"
+: > "$CLI_REQ"
 
 for module in "${imports[@]}"; do
     group="core"
@@ -46,7 +48,6 @@ for module in "${imports[@]}"; do
         yaml) package="PyYAML" ;;
         gevent) package="gevent" ;;
         vdf) package="vdf" ;;
-        urwid) package="urwid" ;;
         Cryptodome) package="pycryptodomex" ;;
         cachetools) package="cachetools" ;;
         google) package="protobuf" ;;
@@ -55,6 +56,11 @@ for module in "${imports[@]}"; do
         pygame) package="pygame" ;;
         tinytag) package="tinytag" ;;
         pkg_resources) package="setuptools" ;;
+
+        urwid)
+            package="urwid"
+            group="cli"
+            ;;
 
         just_playback)
             package="just-playback"
@@ -91,10 +97,11 @@ for module in "${imports[@]}"; do
         audio) printf '%s\n' "$package" >> "$AUDIO_REQ" ;;
         media) printf '%s\n' "$package" >> "$MEDIA_REQ" ;;
         steam) printf '%s\n' "$package" >> "$STEAM_REQ" ;;
+        cli) printf '%s\n' "$package" >> "$CLI_REQ" ;;
     esac
 done
 
-for file in "$CORE_REQ" "$AUDIO_REQ" "$MEDIA_REQ" "$STEAM_REQ"; do
+for file in "$CORE_REQ" "$AUDIO_REQ" "$MEDIA_REQ" "$STEAM_REQ" "$CLI_REQ"; do
     sort -u -o "$file" "$file"
 done
 
@@ -129,8 +136,9 @@ install_extra() {
 install_extra audio "$AUDIO_REQ"
 install_extra media "$MEDIA_REQ"
 install_extra steam "$STEAM_REQ"
+install_extra cli "$CLI_REQ"
 
 echo
 echo "Source environment ready."
 echo "Run: $ROOT/tools/run-accela-source.sh"
-echo "Extras: ACCELA_EXTRAS=audio,media,steam $ROOT/accela"
+echo "Extras: ACCELA_EXTRAS=audio,media,steam,cli $ROOT/accela"
