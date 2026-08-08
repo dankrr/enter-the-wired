@@ -67,23 +67,16 @@ class DownloadDepotsTask(QObject):
         try:
             self.progress.emit("Checking .NET 9 runtime availability...")
             if not ensure_dotnet_availability():
-                self.progress.emit(
-                    "ERROR: .NET 9 runtime is required and could not be installed automatically."
+                raise RuntimeError(
+                    ".NET 9 runtime is required and could not be installed automatically."
                 )
-                logger.critical(".NET 9 runtime not available")
-                self.error.emit((RuntimeError, ".NET 9 runtime not available", None))
-                return
 
             commands, skipped_depots, depot_sizes = self._prepare_downloads(
                 game_data, selected_depots, dest_path
             )
 
             if not commands:
-                self.progress.emit(
-                    "No valid download commands to execute. Task finished."
-                )
-                self.completed.emit()
-                return
+                raise RuntimeError("No valid depot download commands were generated.")
 
             total_depots = len(commands)
             self.total_download_size_for_this_job = sum(depot_sizes)
@@ -96,7 +89,7 @@ class DownloadDepotsTask(QObject):
             for i, current_cmd in enumerate(commands):
                 if not self._is_running:
                     logger.info("Download task stopping before next depot.")
-                    break
+                    return
 
                 depot_id = current_cmd[5]
                 self.current_depot_size = depot_sizes[i]
@@ -126,7 +119,6 @@ class DownloadDepotsTask(QObject):
                     if self.process and self.process.poll() is None:
                         self.process.terminate()
                     logger.info("Download task stopping because stop() was called.")
-                    self.completed.emit()
                     return
 
                 return_code = 0
@@ -135,14 +127,11 @@ class DownloadDepotsTask(QObject):
                     self.process = None
 
                 if return_code != 0:
-                    msg = (
-                        f"Warning: DepotDownloader exited with code "
-                        f"{return_code} for depot {depot_id}."
+                    raise RuntimeError(
+                        f"DepotDownloader exited with code {return_code} for depot {depot_id}."
                     )
-                    self.progress.emit(msg)
-                    logger.warning(msg)
-                else:
-                    self.completed_so_far_for_this_job += self.current_depot_size
+
+                self.completed_so_far_for_this_job += self.current_depot_size
 
             if skipped_depots:
                 self.progress.emit(
@@ -152,7 +141,6 @@ class DownloadDepotsTask(QObject):
 
             if not self._is_running:
                 logger.info("Download task stopped before cleanup.")
-                self.completed.emit()
                 return
 
             self._cleanup_temp_files()
@@ -164,19 +152,26 @@ class DownloadDepotsTask(QObject):
                 binary = current_cmd[0]
 
             error_msg = (
-                f"ERROR: '{binary}' command not found. "
-                "Ensure .NET Runtime is installed and 'dotnet' is in your PATH."
+                f"'{binary}' command not found. "
+                "Ensure the required runtime is installed and available in PATH."
             )
-            self.progress.emit(error_msg)
-            logger.critical(f"'{binary}' not found.")
-            self.error.emit()
-            raise
+            self.progress.emit(f"ERROR: {error_msg}")
+            logger.error(error_msg)
+            self._cleanup_temp_files()
+            raise RuntimeError(error_msg)
 
         except (OSError, subprocess.SubprocessError) as e:
             self.progress.emit(f"An unexpected error occurred during download: {e}")
             logger.error(f"Download subprocess failed: {e}", exc_info=True)
             self.process = None
-            self.error.emit()
+            self._cleanup_temp_files()
+            raise
+
+        except RuntimeError as e:
+            self.progress.emit(f"ERROR: {e}")
+            logger.error(f"Download failed: {e}")
+            self.process = None
+            self._cleanup_temp_files()
             raise
 
     def _read_process_output(self):
@@ -331,6 +326,11 @@ class DownloadDepotsTask(QObject):
             )
         dotnet_cmd = dotnet_path
         dll_path = resource_path(os.path.join("deps", "DepotDownloader.dll"))
+
+        if not os.path.isfile(dll_path):
+            raise RuntimeError(
+                f"DepotDownloader runtime is missing: {dll_path}"
+            )
 
         settings = get_settings()
         max_downloads = settings.value("max_downloads", 20, type=int)
