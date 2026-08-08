@@ -152,20 +152,20 @@ install_source_dev() {
     echo -e "${GREEN}Editable ACCELA source detected.${NC}"
     echo "Using source mode; deps.tar.gz/AppImage will not be downloaded."
 
-    if [ ! -x "$SOURCE_BOOTSTRAP" ] || [ ! -x "$SOURCE_RUNNER" ]; then
-        chmod +x "$SOURCE_BOOTSTRAP" "$SOURCE_RUNNER" 2>/dev/null || true
-    fi
-
-    if [ ! -x "$SOURCE_BOOTSTRAP" ] || [ ! -x "$SOURCE_RUNNER" ]; then
-        echo -e "${RED}Source development helpers are missing or not executable.${NC}" >&2
+    if [ ! -f "$SOURCE_BOOTSTRAP" ] || [ ! -f "$SOURCE_RUNNER" ]; then
+        echo -e "${RED}Source development helpers are missing.${NC}" >&2
         return 1
     fi
 
-    "$SOURCE_BOOTSTRAP"
+    bash "$SOURCE_BOOTSTRAP"
     ensure_accela_conf_general
 
     mkdir -p "$HOME/.local/bin"
-    ln -sfn "$SOURCE_RUNNER" "$HOME/.local/bin/accela-dev"
+    cat > "$HOME/.local/bin/accela-dev" <<EOF
+#!/usr/bin/env bash
+exec bash "$SOURCE_RUNNER" "\$@"
+EOF
+    chmod +x "$HOME/.local/bin/accela-dev"
 
     echo
     echo -e "${GREEN}[INFO] ACCELA source environment is ready.${NC}"
@@ -215,7 +215,7 @@ install_legacy_appimage() {
     }
 
     if [ ! -f "$EXTRACT_DIR/ACCELAINSTALL" ]; then
-        echo -e "${RED}ACCELAINSTALL not found in legacy package.${NC}"
+        echo -e "${RED}ACCELAINSTALL not found in legacy package.${NC}" >&2
         return 1
     fi
 
