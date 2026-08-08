@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$ROOT/accela-src/src"
 VENV="$ROOT/.venv"
 REQ="$ROOT/accela-src/requirements.detected.txt"
+OPTIONAL_REQ="$ROOT/accela-src/requirements.optional.txt"
+EXTRAS="${ACCELA_EXTRAS:-}"
 
 if [ ! -f "$SRC/main.py" ]; then
     echo "Editable ACCELA source is not present."
@@ -23,7 +25,9 @@ fi
 mapfile -t imports < <(python3 "$ROOT/tools/audit-python-imports.py")
 
 : > "$REQ"
+: > "$OPTIONAL_REQ"
 for module in "${imports[@]}"; do
+    optional=0
     case "$module" in
         PyQt6) package="PyQt6" ;;
         psutil) package="psutil" ;;
@@ -45,23 +49,49 @@ for module in "${imports[@]}"; do
         cffi) package="cffi" ;;
         pygame) package="pygame" ;;
         tinytag) package="tinytag" ;;
-        just_playback) package="just-playback" ;;
+        just_playback)
+            package="just-playback"
+            optional=1
+            ;;
         pkg_resources) package="setuptools" ;;
         *)
             echo "Unmapped third-party import: $module" >&2
             continue
             ;;
     esac
-    printf '%s\n' "$package" >> "$REQ"
+
+    if [ "$optional" -eq 1 ]; then
+        printf '%s\n' "$package" >> "$OPTIONAL_REQ"
+    else
+        printf '%s\n' "$package" >> "$REQ"
+    fi
 done
 
 sort -u -o "$REQ" "$REQ"
+sort -u -o "$OPTIONAL_REQ" "$OPTIONAL_REQ"
 
-echo "Detected Python packages:"
+echo "Core Python packages:"
 sed 's/^/  /' "$REQ"
 
 if [ -s "$REQ" ]; then
     "$VENV/bin/python" -m pip install -r "$REQ"
+fi
+
+if [ -s "$OPTIONAL_REQ" ]; then
+    echo
+    echo "Optional Python packages:"
+    sed 's/^/  /' "$OPTIONAL_REQ"
+
+    case ",$EXTRAS," in
+        *,audio,*|*,all,*)
+            echo "Installing optional audio support..."
+            "$VENV/bin/python" -m pip install -r "$OPTIONAL_REQ"
+            ;;
+        *)
+            echo "Skipping optional audio support."
+            echo "Re-run with ACCELA_EXTRAS=audio to install it."
+            ;;
+    esac
 fi
 
 echo
