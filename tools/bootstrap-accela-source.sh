@@ -11,6 +11,7 @@ STEAM_REQ="$ROOT/accela-src/requirements.optional-steam.txt"
 CLI_REQ="$ROOT/accela-src/requirements.optional-cli.txt"
 DB_REQ="$ROOT/accela-src/requirements.optional-db.txt"
 PROCESS_REQ="$ROOT/accela-src/requirements.optional-process.txt"
+WINDOWS_REQ="$ROOT/accela-src/requirements.optional-windows.txt"
 EXTRAS="${ACCELA_EXTRAS:-}"
 
 if [ ! -f "$SRC/main.py" ]; then
@@ -36,6 +37,7 @@ printf '%s\n' "just-playback" > "$AUDIO_REQ"
 : > "$CLI_REQ"
 : > "$DB_REQ"
 : > "$PROCESS_REQ"
+: > "$WINDOWS_REQ"
 
 for module in "${imports[@]}"; do
     group="core"
@@ -49,7 +51,6 @@ for module in "${imports[@]}"; do
         cryptography) package="cryptography" ;;
         yaml) package="PyYAML" ;;
         gevent) package="gevent" ;;
-        vdf) package="vdf" ;;
         Cryptodome) package="pycryptodomex" ;;
         cachetools) package="cachetools" ;;
         google) package="protobuf" ;;
@@ -93,9 +94,14 @@ for module in "${imports[@]}"; do
             group="steam"
             ;;
 
+        vdf)
+            package="vdf"
+            group="windows"
+            ;;
+
         windows_curses)
-            # Windows-only compatibility import. This branch targets Linux.
-            continue
+            package="windows-curses"
+            group="windows"
             ;;
 
         *)
@@ -112,10 +118,11 @@ for module in "${imports[@]}"; do
         cli) printf '%s\n' "$package" >> "$CLI_REQ" ;;
         db) printf '%s\n' "$package" >> "$DB_REQ" ;;
         process) printf '%s\n' "$package" >> "$PROCESS_REQ" ;;
+        windows) printf '%s\n' "$package" >> "$WINDOWS_REQ" ;;
     esac
 done
 
-for file in "$CORE_REQ" "$AUDIO_REQ" "$MEDIA_REQ" "$STEAM_REQ" "$CLI_REQ" "$DB_REQ" "$PROCESS_REQ"; do
+for file in "$CORE_REQ" "$AUDIO_REQ" "$MEDIA_REQ" "$STEAM_REQ" "$CLI_REQ" "$DB_REQ" "$PROCESS_REQ" "$WINDOWS_REQ"; do
     sort -u -o "$file" "$file"
 done
 
@@ -153,8 +160,9 @@ install_extra steam "$STEAM_REQ"
 install_extra cli "$CLI_REQ"
 install_extra db "$DB_REQ"
 install_extra process "$PROCESS_REQ"
+install_extra windows "$WINDOWS_REQ"
 
 echo
 echo "Source environment ready."
 echo "Run: $ROOT/tools/run-accela-source.sh"
-echo "Extras: ACCELA_EXTRAS=audio,media,steam,cli,db,process $ROOT/accela"
+echo "Extras: ACCELA_EXTRAS=audio,media,steam,cli,db,process,windows $ROOT/accela"
