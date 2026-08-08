@@ -10,6 +10,7 @@ MEDIA_REQ="$ROOT/accela-src/requirements.optional-media.txt"
 STEAM_REQ="$ROOT/accela-src/requirements.optional-steam.txt"
 CLI_REQ="$ROOT/accela-src/requirements.optional-cli.txt"
 DB_REQ="$ROOT/accela-src/requirements.optional-db.txt"
+PROCESS_REQ="$ROOT/accela-src/requirements.optional-process.txt"
 EXTRAS="${ACCELA_EXTRAS:-}"
 
 if [ ! -f "$SRC/main.py" ]; then
@@ -34,13 +35,13 @@ printf '%s\n' "just-playback" > "$AUDIO_REQ"
 : > "$STEAM_REQ"
 : > "$CLI_REQ"
 : > "$DB_REQ"
+: > "$PROCESS_REQ"
 
 for module in "${imports[@]}"; do
     group="core"
 
     case "$module" in
         PyQt6) package="PyQt6" ;;
-        psutil) package="psutil" ;;
         bs4) package="beautifulsoup4" ;;
         requests) package="requests" ;;
         urllib3) package="urllib3" ;;
@@ -57,6 +58,11 @@ for module in "${imports[@]}"; do
         pygame) package="pygame" ;;
         tinytag) package="tinytag" ;;
         pkg_resources) package="setuptools" ;;
+
+        psutil)
+            package="psutil"
+            group="process"
+            ;;
 
         zstandard)
             package="zstandard"
@@ -105,10 +111,11 @@ for module in "${imports[@]}"; do
         steam) printf '%s\n' "$package" >> "$STEAM_REQ" ;;
         cli) printf '%s\n' "$package" >> "$CLI_REQ" ;;
         db) printf '%s\n' "$package" >> "$DB_REQ" ;;
+        process) printf '%s\n' "$package" >> "$PROCESS_REQ" ;;
     esac
 done
 
-for file in "$CORE_REQ" "$AUDIO_REQ" "$MEDIA_REQ" "$STEAM_REQ" "$CLI_REQ" "$DB_REQ"; do
+for file in "$CORE_REQ" "$AUDIO_REQ" "$MEDIA_REQ" "$STEAM_REQ" "$CLI_REQ" "$DB_REQ" "$PROCESS_REQ"; do
     sort -u -o "$file" "$file"
 done
 
@@ -145,8 +152,9 @@ install_extra media "$MEDIA_REQ"
 install_extra steam "$STEAM_REQ"
 install_extra cli "$CLI_REQ"
 install_extra db "$DB_REQ"
+install_extra process "$PROCESS_REQ"
 
 echo
 echo "Source environment ready."
 echo "Run: $ROOT/tools/run-accela-source.sh"
-echo "Extras: ACCELA_EXTRAS=audio,media,steam,cli,db $ROOT/accela"
+echo "Extras: ACCELA_EXTRAS=audio,media,steam,cli,db,process $ROOT/accela"
