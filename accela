@@ -35,7 +35,7 @@ ensure_accela_conf_general() {
     fi
 
     if [ ! -f "$CONF_PATH" ]; then
-        cat > "$CONF_PATH" <<'EOF' || return 0
+        cat > "$CONF_PATH" <<'EOF'
 [General]
 auto_skip_single_choice=true
 library_mode=true
@@ -161,6 +161,10 @@ install_source_dev() {
     ensure_accela_conf_general
 
     mkdir -p "$HOME/.local/bin"
+
+    # Older source-mode installs used a symlink here. Remove it first so
+    # writing the wrapper cannot follow the symlink and overwrite SOURCE_RUNNER.
+    rm -f "$HOME/.local/bin/accela-dev"
     cat > "$HOME/.local/bin/accela-dev" <<EOF
 #!/usr/bin/env bash
 exec bash "$SOURCE_RUNNER" "\$@"
@@ -221,7 +225,7 @@ install_legacy_appimage() {
 
     chmod +x "$EXTRACT_DIR/ACCELAINSTALL"
     (cd "$EXTRACT_DIR" && ./ACCELAINSTALL) || {
-        echo -e "${RED}Error running legacy ACCELAINSTALL.${NC}"
+        echo -e "${RED}Error running legacy ACCELAINSTALL.${NC}" >&2
         return 1
     }
 
