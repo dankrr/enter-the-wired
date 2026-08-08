@@ -4,7 +4,6 @@ from io import BytesIO
 from pathlib import Path
 
 import requests
-from PIL import Image
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from utils.yaml_config_manager import is_slssteam_mode_enabled
@@ -147,16 +146,22 @@ class ApplicationShortcutsTask(QObject):
             return None
 
     def _save_icons(self, icon_url, appid):
-        """Download and save icons in multiple sizes"""
+        """Download and save icons in multiple sizes."""
         try:
-            # Download image
+            from PIL import Image
+        except ImportError as exc:
+            raise RuntimeError(
+                "Shortcut icon generation requires the optional media extra. "
+                "Run ACCELA_EXTRAS=media ./accela to enable it."
+            ) from exc
+
+        try:
             response = requests.get(icon_url, timeout=10)
             response.raise_for_status()
 
             img_data = response.content
             img = Image.open(BytesIO(img_data)).convert("RGBA")
 
-            # Icon sizes
             icon_sizes = [16, 24, 32, 48, 64, 96, 128, 256]
             icon_name = f"steam_icon_{appid}.png"
             icon_base = Path.home() / ".local" / "share" / "icons" / "hicolor"
