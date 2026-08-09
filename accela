@@ -43,7 +43,7 @@ library_mode=true
 max_downloads=16
 sls_config_management=true
 slssteam_mode=true
-use_steamless=true
+use_steamless=false
 EOF
         return 0
     fi
@@ -51,6 +51,8 @@ EOF
     TMP_FILE="$(mktemp)"
     trap 'rm -f "${TMP_FILE:-}"; trap - RETURN' RETURN
 
+    # Only add settings that do not exist. Existing GUI choices belong to the
+    # user and must not be reset every time the source launcher is bootstrapped.
     if ! awk '
 BEGIN {
     in_general = 0
@@ -68,7 +70,7 @@ function print_required_missing() {
     if (!saw_max_downloads) print "max_downloads=16"
     if (!saw_sls_config_management) print "sls_config_management=true"
     if (!saw_slssteam_mode) print "slssteam_mode=true"
-    if (!saw_use_steamless) print "use_steamless=true"
+    if (!saw_use_steamless) print "use_steamless=false"
 }
 /^\[[^]]+\]$/ {
     if (in_general) {
@@ -90,36 +92,12 @@ function print_required_missing() {
 }
 {
     if (in_general) {
-        if ($0 ~ /^auto_skip_single_choice[[:space:]]*=/) {
-            if (!saw_auto_skip_single_choice) print "auto_skip_single_choice=true"
-            saw_auto_skip_single_choice = 1
-            next
-        }
-        if ($0 ~ /^library_mode[[:space:]]*=/) {
-            if (!saw_library_mode) print "library_mode=true"
-            saw_library_mode = 1
-            next
-        }
-        if ($0 ~ /^max_downloads[[:space:]]*=/) {
-            if (!saw_max_downloads) print "max_downloads=16"
-            saw_max_downloads = 1
-            next
-        }
-        if ($0 ~ /^sls_config_management[[:space:]]*=/) {
-            if (!saw_sls_config_management) print "sls_config_management=true"
-            saw_sls_config_management = 1
-            next
-        }
-        if ($0 ~ /^slssteam_mode[[:space:]]*=/) {
-            if (!saw_slssteam_mode) print "slssteam_mode=true"
-            saw_slssteam_mode = 1
-            next
-        }
-        if ($0 ~ /^use_steamless[[:space:]]*=/) {
-            if (!saw_use_steamless) print "use_steamless=true"
-            saw_use_steamless = 1
-            next
-        }
+        if ($0 ~ /^auto_skip_single_choice[[:space:]]*=/) saw_auto_skip_single_choice = 1
+        else if ($0 ~ /^library_mode[[:space:]]*=/) saw_library_mode = 1
+        else if ($0 ~ /^max_downloads[[:space:]]*=/) saw_max_downloads = 1
+        else if ($0 ~ /^sls_config_management[[:space:]]*=/) saw_sls_config_management = 1
+        else if ($0 ~ /^slssteam_mode[[:space:]]*=/) saw_slssteam_mode = 1
+        else if ($0 ~ /^use_steamless[[:space:]]*=/) saw_use_steamless = 1
     }
     print $0
 }
@@ -133,7 +111,7 @@ END {
         print "max_downloads=16"
         print "sls_config_management=true"
         print "slssteam_mode=true"
-        print "use_steamless=true"
+        print "use_steamless=false"
     }
 }
 ' "$CONF_PATH" > "$TMP_FILE"; then
