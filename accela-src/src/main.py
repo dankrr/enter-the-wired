@@ -7,7 +7,9 @@ import ctypes
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer, QMetaObject, Qt, Q_ARG
+import ui.main_window as main_window_module
 from ui.main_window import MainWindow
+from ui.settings_clean import CleanSettingsDialog
 from ui.theme import update_appearance
 from utils.logger import setup_logging
 from utils.settings import get_settings
@@ -20,6 +22,11 @@ from utils.version import app_version
 from core.steam_helpers import fix_greenluma_offline_mode
 from core.morrenus_api import download_manifest
 from utils.helpers import create_font_from_settings
+
+
+# Keep the upstream settings implementation intact and replace only the dialog
+# class used by MainWindow with our small usability layer.
+main_window_module.SettingsDialog = CleanSettingsDialog
 
 
 # -----------------------------------------------------------------------------
