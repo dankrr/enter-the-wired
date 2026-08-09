@@ -7,7 +7,6 @@ VENV="$ROOT/.venv"
 CORE_REQ="$ROOT/accela-src/requirements.detected.txt"
 AUDIO_REQ="$ROOT/accela-src/requirements.optional-audio.txt"
 MEDIA_REQ="$ROOT/accela-src/requirements.optional-media.txt"
-STEAM_REQ="$ROOT/accela-src/requirements.optional-steam.txt"
 CLI_REQ="$ROOT/accela-src/requirements.optional-cli.txt"
 DB_REQ="$ROOT/accela-src/requirements.optional-db.txt"
 PROCESS_REQ="$ROOT/accela-src/requirements.optional-process.txt"
@@ -47,11 +46,11 @@ mapfile -t imports < <(python3 "$ROOT/tools/audit-python-imports.py")
 : > "$CORE_REQ"
 printf '%s\n' "just-playback" > "$AUDIO_REQ"
 : > "$MEDIA_REQ"
-: > "$STEAM_REQ"
 : > "$CLI_REQ"
 : > "$DB_REQ"
 : > "$PROCESS_REQ"
 : > "$WINDOWS_REQ"
+rm -f "$ROOT/accela-src/requirements.optional-steam.txt"
 
 for module in "${imports[@]}"; do
     group="core"
@@ -112,8 +111,8 @@ for module in "${imports[@]}"; do
             ;;
 
         steam)
+            # Product-info manifest IDs power the normal update checker.
             package="steam[client]"
-            group="steam"
             ;;
 
         vdf)
@@ -136,7 +135,6 @@ for module in "${imports[@]}"; do
         core) printf '%s\n' "$package" >> "$CORE_REQ" ;;
         audio) printf '%s\n' "$package" >> "$AUDIO_REQ" ;;
         media) printf '%s\n' "$package" >> "$MEDIA_REQ" ;;
-        steam) printf '%s\n' "$package" >> "$STEAM_REQ" ;;
         cli) printf '%s\n' "$package" >> "$CLI_REQ" ;;
         db) printf '%s\n' "$package" >> "$DB_REQ" ;;
         process) printf '%s\n' "$package" >> "$PROCESS_REQ" ;;
@@ -144,7 +142,7 @@ for module in "${imports[@]}"; do
     esac
 done
 
-for file in "$CORE_REQ" "$AUDIO_REQ" "$MEDIA_REQ" "$STEAM_REQ" "$CLI_REQ" "$DB_REQ" "$PROCESS_REQ" "$WINDOWS_REQ"; do
+for file in "$CORE_REQ" "$AUDIO_REQ" "$MEDIA_REQ" "$CLI_REQ" "$DB_REQ" "$PROCESS_REQ" "$WINDOWS_REQ"; do
     sort -u -o "$file" "$file"
 done
 
@@ -185,7 +183,6 @@ install_extra() {
 
 install_extra audio "$AUDIO_REQ"
 install_extra media "$MEDIA_REQ"
-install_extra steam "$STEAM_REQ"
 install_extra cli "$CLI_REQ"
 install_extra db "$DB_REQ"
 install_extra process "$PROCESS_REQ"
@@ -199,5 +196,5 @@ else
     echo "Qt: using pip PyQt6"
 fi
 echo "Run: $ROOT/tools/run-accela-source.sh"
-echo "Extras: ACCELA_EXTRAS=audio,media,steam,cli,db,process,windows $ROOT/accela"
+echo "Extras: ACCELA_EXTRAS=audio,media,cli,db,process,windows $ROOT/accela"
 echo "Force pip Qt: ACCELA_PIP_QT=1 $ROOT/accela"
