@@ -266,7 +266,14 @@ def start_steam_with_slssteam(slssteam_path=None, library_inject_path=None):
         )
         env = os.environ.copy()
         env["LD_AUDIT"] = f"{library_inject_path}:{slssteam_path}"
-        subprocess.Popen(["steam"], env=env)
+        subprocess.Popen(
+            ["steam"],
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
         return "SUCCESS"
     except (OSError, subprocess.SubprocessError) as e:
         logger.error(
