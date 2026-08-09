@@ -8,6 +8,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer, QMetaObject, Qt, Q_ARG
 import ui.main_window as main_window_module
+from managers.task_manager_clean import CleanTaskManager
 from ui.main_window import MainWindow
 from ui.settings_clean import CleanSettingsDialog
 from ui.theme import update_appearance
@@ -24,9 +25,10 @@ from core.morrenus_api import download_manifest
 from utils.helpers import create_font_from_settings
 
 
-# Keep the upstream settings implementation intact and replace only the dialog
-# class used by MainWindow with our small usability layer.
+# Keep the upstream implementations intact and replace only the classes used by
+# MainWindow with the lean runtime-aware layers.
 main_window_module.SettingsDialog = CleanSettingsDialog
+main_window_module.TaskManager = CleanTaskManager
 
 
 # -----------------------------------------------------------------------------
