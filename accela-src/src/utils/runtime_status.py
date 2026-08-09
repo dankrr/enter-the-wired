@@ -1,5 +1,4 @@
 import importlib.util
-import os
 import sys
 from pathlib import Path
 from typing import Dict
@@ -81,48 +80,55 @@ def _slscheevo_ready() -> bool:
     return (root / executable).exists() or (root / "SLScheevo.py").exists()
 
 
+def _directory_has_files(path: Path) -> bool:
+    try:
+        return path.exists() and path.is_dir() and next(path.iterdir(), None) is not None
+    except OSError:
+        return False
+
+
 def _steamless_ready() -> bool:
-    root = Paths.deps("Steamless")
-    return root.exists() and root.is_dir() and any(root.iterdir())
+    return _directory_has_files(Paths.deps("Steamless"))
 
 
 def _steamless_aio_ready() -> bool:
-    root = Paths.deps("Steamless-AIO")
-    return root.exists() and root.is_dir() and any(root.iterdir())
+    return _directory_has_files(Paths.deps("Steamless-AIO"))
 
 
 def get_runtime_status() -> Dict[str, dict]:
     """Return lightweight local health checks for core and optional runtime pieces."""
     dotnet = get_dotnet_path()
-    depot_downloader = Paths.deps("DepotDownloader.dll")
+    depot_downloader = Paths.deps("DepotDownloader.dll").exists()
+    steam_running = _steam_running()
+    slssteam = _slssteam_ready()
+    steam_api = _module_available("steam.client")
+    slscheevo = _slscheevo_ready()
+    steamless = _steamless_ready()
+    steamless_aio = _steamless_aio_ready()
 
     return {
         "steam": {
             "label": "Steam",
-            "ready": _steam_running(),
-            "status": "Running" if _steam_running() else "Not running",
+            "ready": steam_running,
+            "status": "Running" if steam_running else "Not running",
             "required": False,
         },
         "slssteam": {
             "label": "SLSsteam",
-            "ready": _slssteam_ready(),
-            "status": "Ready" if _slssteam_ready() else "Missing",
+            "ready": slssteam,
+            "status": "Ready" if slssteam else "Missing",
             "required": sys.platform == "linux",
         },
         "depot_downloader": {
             "label": "DepotDownloader",
-            "ready": depot_downloader.exists() and dotnet is not None,
-            "status": (
-                "Ready"
-                if depot_downloader.exists() and dotnet is not None
-                else "Missing runtime"
-            ),
+            "ready": depot_downloader and dotnet is not None,
+            "status": "Ready" if depot_downloader and dotnet is not None else "Missing runtime",
             "required": True,
         },
         "steam_api": {
             "label": "Steam update API",
-            "ready": _module_available("steam.client"),
-            "status": "Ready" if _module_available("steam.client") else "Missing",
+            "ready": steam_api,
+            "status": "Ready" if steam_api else "Missing",
             "required": True,
         },
         "dotnet": {
@@ -133,20 +139,20 @@ def get_runtime_status() -> Dict[str, dict]:
         },
         "slscheevo": {
             "label": "Achievements",
-            "ready": _slscheevo_ready(),
-            "status": "Ready" if _slscheevo_ready() else "SLScheevo missing",
+            "ready": slscheevo,
+            "status": "Ready" if slscheevo else "SLScheevo missing",
             "required": False,
         },
         "steamless": {
             "label": "Steamless",
-            "ready": _steamless_ready(),
-            "status": "Ready" if _steamless_ready() else "Missing",
+            "ready": steamless,
+            "status": "Ready" if steamless else "Missing",
             "required": False,
         },
         "steamless_aio": {
             "label": "Steamless-AIO",
-            "ready": _steamless_aio_ready(),
-            "status": "Ready" if _steamless_aio_ready() else "Missing",
+            "ready": steamless_aio,
+            "status": "Ready" if steamless_aio else "Missing",
             "required": False,
         },
     }
