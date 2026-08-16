@@ -30,9 +30,7 @@ class CleanTaskManager(BaseTaskManager):
             if "steamless" not in self._job_steps_completed:
                 self._job_steps_completed.add("steamless")
                 if runtime[steamless_key]["ready"]:
-                    self.main_window.drop_text_label.setText(
-                        f"Running Steamless: {self.game_data.get('game_name', '')}"
-                    )
+                    self._set_job_stage("Running Steamless…")
                     self._start_steamless_processing(use_aio=steamless_aio_enabled)
                     return
 
@@ -66,9 +64,7 @@ class CleanTaskManager(BaseTaskManager):
             if "achievements" not in self._job_steps_completed:
                 self._job_steps_completed.add("achievements")
                 if runtime["slscheevo"]["ready"]:
-                    self.main_window.drop_text_label.setText(
-                        f"Generating Achievements: {self.game_data.get('game_name', '')}"
-                    )
+                    self._set_job_stage("Generating achievements…")
                     self._start_achievement_generation()
                     return
 

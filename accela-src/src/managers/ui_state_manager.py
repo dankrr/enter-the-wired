@@ -40,6 +40,7 @@ class UIStateManager:
         self.queue_count_label = None
         self.queue_empty_label = None
         self.queue_list_widget = None
+        self.queue_controls_widget = None
         self.queue_move_up_button = None
         self.queue_move_down_button = None
         self.queue_remove_button = None
@@ -285,7 +286,9 @@ class UIStateManager:
 
     def _setup_queue_buttons(self, parent_layout):
         """Setup queue control buttons"""
-        queue_button_layout = QHBoxLayout()
+        self.queue_controls_widget = QWidget()
+        queue_button_layout = QHBoxLayout(self.queue_controls_widget)
+        queue_button_layout.setContentsMargins(0, 0, 0, 0)
 
         self.queue_move_up_button = QPushButton("↑ Earlier")
         self.queue_move_up_button.clicked.connect(
@@ -303,7 +306,7 @@ class UIStateManager:
         self.queue_remove_button.clicked.connect(self.main_window.job_queue.remove_item)
         queue_button_layout.addWidget(self.queue_remove_button)
 
-        parent_layout.addLayout(queue_button_layout)
+        parent_layout.addWidget(self.queue_controls_widget)
 
         active_button_layout = QHBoxLayout()
 
@@ -325,6 +328,7 @@ class UIStateManager:
         """Update queue copy and controls for the waiting-job count."""
         self.queue_count_label.setText(f"{count} waiting")
         self.queue_list_widget.setVisible(count > 0)
+        self.queue_controls_widget.setVisible(count > 0)
         self.queue_empty_label.setVisible(count == 0)
         self.main_window.set_queue_count(count)
         self.update_queue_button_states()

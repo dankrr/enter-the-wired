@@ -107,6 +107,7 @@ class TaskManager(QObject):
         self._last_installed_game = None
 
         self._delete_files_on_cancel: Optional[bool] = None
+        self._current_depot_status = ""
 
         # Status colors
         self.STATUS_OK = "#00FF00"
@@ -118,6 +119,26 @@ class TaskManager(QObject):
     def last_installed_game(self):
         return self._last_installed_game
 
+    def _get_active_game_name(self) -> str:
+        """Return the best user-facing name available for the current job."""
+        if self.game_data:
+            game_name = str(self.game_data.get("game_name") or "").strip()
+            if game_name:
+                return game_name
+
+        metadata = self.current_job_metadata or {}
+        game_name = str(metadata.get("game_name") or "").strip()
+        if game_name:
+            return game_name
+
+        filename = os.path.basename(self.current_job or "")
+        display_name, _ = os.path.splitext(filename)
+        return display_name or "Preparing download"
+
+    def _set_job_stage(self, detail: str) -> None:
+        """Publish normal job state to the main view instead of only the log."""
+        self.main_window.set_activity(self._get_active_game_name(), detail)
+
     def start_zip_processing(self, zip_path, metadata=None):
         self.is_processing = True
         self.current_job = zip_path
@@ -127,9 +148,9 @@ class TaskManager(QObject):
         if self.main_window:
             self.main_window.progress_bar.setVisible(True)
             self.main_window.progress_bar.setRange(0, 0)
-            self.main_window.drop_text_label.setText(
-                f"Processing: {os.path.basename(zip_path)}"
-            )
+            self.main_window.progress_label.setText("Progress · preparing")
+            self.main_window.speed_label.setVisible(False)
+            self._set_job_stage("Reading manifest ZIP…")
 
         self.zip_task = ProcessZipTask()
         self.zip_task_runner = TaskRunner()
@@ -144,6 +165,9 @@ class TaskManager(QObject):
         self.main_window.progress_bar.setRange(0, 100)
         self.main_window.progress_bar.setValue(100)
         self.game_data = game_data
+
+        if self.game_data:
+            self._set_job_stage("Manifest ready · choose depots to download")
 
         if self.game_data and self.game_data.get("depots"):
             self._show_depot_selection_dialog()
@@ -287,21 +311,27 @@ class TaskManager(QObject):
         self._last_steamless_status = "not_run"
         self._last_steamless_status_text = "N/A"
 
-        self.main_window.ui_state.switch_to_download_gif()
-        self._update_status_button_color()
-        self.main_window.drop_text_label.setText(
-            f"Downloading: {self.game_data.get('game_name', '')}"
+        self._current_depot_status = (
+            f"Starting {len(selected_depots)} "
+            f"{'depot' if len(selected_depots) == 1 else 'depots'}…"
         )
 
+        self.main_window.ui_state.switch_to_download_gif()
+        self._update_status_button_color()
+        self._set_job_stage(self._current_depot_status)
+
         self.main_window.progress_bar.setVisible(True)
+        self.main_window.progress_bar.setRange(0, 100)
         self.main_window.progress_bar.setValue(0)
         self.main_window.speed_label.setVisible(True)
+        self.main_window.speed_label.setText("Network speed · starting…")
 
         self.download_task = DownloadDepotsTask()
         self.download_task.progress.connect(logger.info)
         self.download_task.progress_percentage.connect(
             self.main_window.progress_bar.setValue
         )
+        self.download_task.depot_started.connect(self._on_depot_started)
         self.download_task.completed.connect(self._on_download_complete)
         self.download_task.error.connect(self._handle_task_error)
 
@@ -315,8 +345,21 @@ class TaskManager(QObject):
 
         self._start_speed_monitor()
         self.is_download_paused = False
-        self.main_window.ui_state.pause_button.setText("Pause")
+        pause_available = psutil is not None
+        self.main_window.ui_state.pause_button.setText(
+            "Pause starting…" if pause_available else "Pause unavailable"
+        )
+        self.main_window.ui_state.pause_button.setEnabled(False)
+        if pause_available:
+            self.main_window.ui_state.pause_button.setToolTip(
+                "Pause the active DepotDownloader process"
+            )
+        else:
+            self.main_window.ui_state.pause_button.setToolTip(
+                "Pause requires the optional process support package"
+            )
         self.main_window.ui_state.pause_button.setVisible(True)
+        self.main_window.ui_state.cancel_button.setEnabled(True)
         self.main_window.ui_state.cancel_button.setVisible(True)
 
         if not self.slssteam_mode_was_active:
@@ -332,9 +375,15 @@ class TaskManager(QObject):
                     logger.error(f"Failed to write app token: {e}")
 
     def _start_speed_monitor(self):
+        if psutil is None:
+            self.main_window.speed_label.setText(
+                "Network speed · unavailable"
+            )
+            return
+
         self.speed_monitor_task = SpeedMonitorTask()
         self.speed_monitor_task.speed_update.connect(
-            self.main_window.speed_label.setText
+            self._on_speed_update
         )
 
         self.speed_monitor_runner = TaskRunner()
@@ -342,6 +391,18 @@ class TaskManager(QObject):
             self._on_speed_monitor_stopped
         )
         self.speed_monitor_runner.run(self.speed_monitor_task.run)
+
+    def _on_speed_update(self, speed_text: str):
+        if not self.is_download_paused:
+            self.main_window.set_download_speed(speed_text)
+
+    def _on_depot_started(self, depot_id: str, position: int, total: int):
+        self._current_depot_status = f"Depot {depot_id} · {position} of {total}"
+        self._set_job_stage(self._current_depot_status)
+
+        if psutil is not None:
+            self.main_window.ui_state.pause_button.setText("Pause download")
+            self.main_window.ui_state.pause_button.setEnabled(True)
 
     def _stop_speed_monitor(self):
         if self.speed_monitor_task:
@@ -377,13 +438,16 @@ class TaskManager(QObject):
 
         self._stop_speed_monitor()
         self.main_window.progress_bar.setValue(100)
+        self.main_window.speed_label.setVisible(False)
+        self.main_window.ui_state.pause_button.setVisible(False)
+        self.main_window.ui_state.cancel_button.setVisible(False)
 
         if not self.game_data:
             if self.is_processing:
                 self.job_finished()
             return
 
-        self.main_window.drop_text_label.setText("Finalizing installation...")
+        self._set_job_stage("Finalizing installation…")
         logger.info("Starting post-download I/O processing in background thread...")
 
         size_on_disk = 0
@@ -524,9 +588,7 @@ class TaskManager(QObject):
         if (steamless_enabled or steamless_aio_enabled) and not self.is_cancelling:
             if "steamless" not in self._job_steps_completed:
                 self._job_steps_completed.add("steamless")
-                self.main_window.drop_text_label.setText(
-                    f"Running Steamless: {self.game_data.get('game_name', '')}"
-                )
+                self._set_job_stage("Running Steamless…")
                 self._start_steamless_processing(use_aio=steamless_aio_enabled)
                 return
 
@@ -552,9 +614,7 @@ class TaskManager(QObject):
         if achievements_enabled and not self.is_cancelling:
             if "achievements" not in self._job_steps_completed:
                 self._job_steps_completed.add("achievements")
-                self.main_window.drop_text_label.setText(
-                    f"Generating Achievements: {self.game_data.get('game_name', '')}"
-                )
+                self._set_job_stage("Generating achievements…")
                 self._start_achievement_generation()
                 return
 
@@ -577,9 +637,7 @@ class TaskManager(QObject):
         self.job_finished()
 
     def _start_application_shortcuts_step(self):
-        self.main_window.drop_text_label.setText(
-            f"Creating Application Shortcuts: {self.game_data.get('game_name', '')}"
-        )
+        self._set_job_stage("Creating application shortcuts…")
         self._start_application_shortcuts_processing()
 
     def _should_prompt_for_steam_restart(self) -> bool:
@@ -1568,8 +1626,11 @@ class TaskManager(QObject):
 
         self.is_download_paused = False
         self.main_window.ui_state.pause_button.setVisible(False)
+        self.main_window.ui_state.pause_button.setEnabled(False)
         self.main_window.ui_state.cancel_button.setVisible(False)
+        self.main_window.ui_state.cancel_button.setEnabled(True)
         self.download_task = None
+        self._current_depot_status = ""
         self.is_cancelling = False
         self._delete_files_on_cancel = None
 
@@ -1619,25 +1680,25 @@ class TaskManager(QObject):
         self.main_window.bottom_titlebar.no_previous_state = False
 
     def toggle_pause(self):
-        if not self.download_task:
+        if (
+            not self.download_task
+            or psutil is None
+            or not self.download_task.process
+        ):
             return
 
-        self.is_download_paused = not self.is_download_paused
+        next_paused_state = not self.is_download_paused
 
         try:
-            self.download_task.toggle_pause(self.is_download_paused)
-            if self.is_download_paused:
-                self.main_window.ui_state.pause_button.setText("Resume")
-                self.main_window.drop_text_label.setText(
-                    f"Paused: {os.path.basename(self.current_job)}"
-                )
-                self._stop_speed_monitor()
+            self.download_task.toggle_pause(next_paused_state)
+            self.is_download_paused = next_paused_state
+            if next_paused_state:
+                self.main_window.ui_state.pause_button.setText("Resume download")
+                self._set_job_stage(f"Paused · {self._current_depot_status}")
+                self.main_window.speed_label.setText("Network speed · paused")
             else:
-                self.main_window.ui_state.pause_button.setText("Pause")
-                self.main_window.drop_text_label.setText(
-                    f"Downloading: {os.path.basename(self.current_job)}"
-                )
-                self._start_speed_monitor()
+                self.main_window.ui_state.pause_button.setText("Pause download")
+                self._set_job_stage(self._current_depot_status)
         except Exception as e:
             logger.error(f"Failed to toggle pause: {e}")
 
@@ -1645,12 +1706,11 @@ class TaskManager(QObject):
         if not self.download_task or not self.current_job:
             return
 
+        game_name = self._get_active_game_name()
         reply = QMessageBox.question(
             self.main_window,
-            "Cancel Job",
-            f"Are you sure you want to cancel the download for '{
-                os.path.basename(self.current_job)
-            }'?",
+            "Cancel Download",
+            f"Are you sure you want to cancel the download for '{game_name}'?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -1660,6 +1720,9 @@ class TaskManager(QObject):
 
         logger.info(f"--- Cancelling job: {os.path.basename(self.current_job)} ---")
         self.is_cancelling = True
+        self._set_job_stage("Cancelling download…")
+        self.main_window.ui_state.pause_button.setEnabled(False)
+        self.main_window.ui_state.cancel_button.setEnabled(False)
         if self.download_runner is not None:
             self.is_awaiting_download_stop = True
 

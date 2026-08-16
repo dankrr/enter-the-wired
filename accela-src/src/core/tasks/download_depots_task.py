@@ -34,6 +34,7 @@ class DownloadDepotsTask(QObject):
 
     progress = pyqtSignal(str)
     progress_percentage = pyqtSignal(int)
+    depot_started = pyqtSignal(str, int, int)
     completed = pyqtSignal()
     error = pyqtSignal()
 
@@ -111,6 +112,7 @@ class DownloadDepotsTask(QObject):
                     text=False,
                     creationflags=creation_flags,
                 )
+                self.depot_started.emit(str(depot_id), i + 1, total_depots)
 
                 self._read_process_output()
                 self._flush_log_buffer()
