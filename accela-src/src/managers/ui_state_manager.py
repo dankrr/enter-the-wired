@@ -242,25 +242,27 @@ class UIStateManager:
 
     def setup_queue_panel(self):
         """Setup the download queue panel"""
-        self.queue_widget = QWidget()
+        self.queue_widget = QFrame()
+        self.queue_widget.setObjectName("QueueCard")
         queue_layout = QVBoxLayout(self.queue_widget)
-        queue_layout.setContentsMargins(0, 0, 5, 0)
-        queue_layout.setSpacing(6)
+        queue_layout.setContentsMargins(14, 11, 14, 13)
+        queue_layout.setSpacing(8)
 
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.queue_title_label = QLabel("UP NEXT")
-        self.queue_title_label.setStyleSheet(
-            f"color: {self.main_window.accent_color}; font-weight: bold;"
-        )
+        self.queue_title_label = QLabel("TRANSFER QUEUE")
+        self.queue_title_label.setObjectName("SectionTitle")
         header_layout.addWidget(self.queue_title_label)
 
-        self.queue_count_label = QLabel("0 waiting")
+        self.queue_count_label = QLabel("0 WAITING")
+        self.queue_count_label.setObjectName("StatusPill")
         header_layout.addWidget(self.queue_count_label)
         header_layout.addStretch()
 
         self.queue_log_button = QPushButton("Activity Log")
+        self.queue_log_button.setObjectName("GhostButton")
+        self.queue_log_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.queue_log_button.setToolTip("Show technical download details")
         self.queue_log_button.clicked.connect(
             self.main_window.toggle_activity_log
@@ -269,6 +271,7 @@ class UIStateManager:
         queue_layout.addLayout(header_layout)
 
         self.queue_list_widget = QListWidget()
+        self.queue_list_widget.setObjectName("QueueList")
         self.queue_list_widget.setToolTip(
             "Downloads waiting behind the active game. Select one to reorder it."
         )
@@ -278,6 +281,7 @@ class UIStateManager:
         queue_layout.addWidget(self.queue_list_widget)
 
         self.queue_empty_label = QLabel("No other downloads queued.")
+        self.queue_empty_label.setObjectName("MutedLabel")
         self.queue_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         queue_layout.addWidget(self.queue_empty_label)
 
@@ -291,18 +295,21 @@ class UIStateManager:
         queue_button_layout.setContentsMargins(0, 0, 0, 0)
 
         self.queue_move_up_button = QPushButton("↑ Earlier")
+        self.queue_move_up_button.setObjectName("SmallButton")
         self.queue_move_up_button.clicked.connect(
             self.main_window.job_queue.move_item_up
         )
         queue_button_layout.addWidget(self.queue_move_up_button)
 
         self.queue_move_down_button = QPushButton("↓ Later")
+        self.queue_move_down_button.setObjectName("SmallButton")
         self.queue_move_down_button.clicked.connect(
             self.main_window.job_queue.move_item_down
         )
         queue_button_layout.addWidget(self.queue_move_down_button)
 
         self.queue_remove_button = QPushButton("Remove queued")
+        self.queue_remove_button.setObjectName("SmallButton")
         self.queue_remove_button.clicked.connect(self.main_window.job_queue.remove_item)
         queue_button_layout.addWidget(self.queue_remove_button)
 
@@ -311,11 +318,13 @@ class UIStateManager:
         active_button_layout = QHBoxLayout()
 
         self.pause_button = QPushButton("Pause download")
+        self.pause_button.setObjectName("PrimaryButton")
         self.pause_button.clicked.connect(self.main_window.task_manager.toggle_pause)
         self.pause_button.setVisible(False)
         active_button_layout.addWidget(self.pause_button)
 
         self.cancel_button = QPushButton("Cancel download")
+        self.cancel_button.setObjectName("DangerButton")
         self.cancel_button.clicked.connect(
             self.main_window.task_manager.cancel_current_job
         )
@@ -324,9 +333,18 @@ class UIStateManager:
 
         parent_layout.addLayout(active_button_layout)
 
+        for button in (
+            self.queue_move_up_button,
+            self.queue_move_down_button,
+            self.queue_remove_button,
+            self.pause_button,
+            self.cancel_button,
+        ):
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+
     def update_queue_summary(self, count: int):
         """Update queue copy and controls for the waiting-job count."""
-        self.queue_count_label.setText(f"{count} waiting")
+        self.queue_count_label.setText(f"{count} WAITING")
         self.queue_list_widget.setVisible(count > 0)
         self.queue_controls_widget.setVisible(count > 0)
         self.queue_empty_label.setVisible(count == 0)
@@ -408,39 +426,13 @@ class UIStateManager:
         self._update_gifs()
 
     def _apply_background_color(self):
-        """Apply background color to main content"""
-        main_frame = self.main_window.central_widget.findChild(QFrame)
-        if main_frame:
-            main_frame.setStyleSheet(
-                f"background-color: {self.main_window.background_color};"
-            )
+        """Leave layered surfaces to the application stylesheet."""
+        self.main_window.central_widget.setStyleSheet("")
 
     def _apply_accent_color(self):
         """Apply accent color to UI elements"""
-        accent_style = f"color: {self.main_window.accent_color};"
-
-        # Drop text label
-        self.main_window.drop_text_label.setStyleSheet(accent_style)
-
-        # Queue labels
-        for queue_label in (
-            self.queue_title_label,
-            self.queue_count_label,
-            self.queue_empty_label,
-        ):
-            if queue_label:
-                queue_label.setStyleSheet(accent_style)
-
-        if self.queue_title_label:
-            self.queue_title_label.setStyleSheet(
-                f"color: {self.main_window.accent_color}; font-weight: bold;"
-            )
-
         # Progress bar
         self.main_window.update_progress_bar_style()
-
-        # Log output
-        self.main_window.log_output.setStyleSheet(accent_style)
 
         # Bottom titlebar
         if hasattr(self.main_window, "bottom_titlebar"):

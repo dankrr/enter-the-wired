@@ -7,6 +7,7 @@ from typing import Dict, Optional
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import (
     QDragEnterEvent,
+    QDragLeaveEvent,
     QDropEvent,
     QIcon,
     QKeySequence,
@@ -15,6 +16,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QFileDialog,
+    QFrame,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -41,6 +43,7 @@ from ui.dialogs.gamelibrary import GameLibraryDialog
 from ui.dialogs.lain import LainMinigameDialog
 from ui.dialogs.settings import SettingsDialog
 from ui.dialogs.status import StatusDialog
+from ui.theme import surface_colors
 from utils.logger import qt_log_handler
 from utils.paths import Paths
 from utils.settings import get_settings
@@ -150,6 +153,9 @@ class MainWindow(QMainWindow):
         self.main_layout = None
         self.drop_zone_container = None
         self.drop_zone_layout = None
+        self.drop_zone_header = None
+        self.node_label = None
+        self.connection_badge = None
         self.drop_zone_gif = None
         self.drop_text_label = None
         self.drop_hint_label = None
@@ -160,6 +166,8 @@ class MainWindow(QMainWindow):
         self.idle_log_button = None
         self.progress_container = None
         self.progress_layout = None
+        self.activity_section_label = None
+        self.activity_live_label = None
         self.progress_bar = None
         self.progress_meta_widget = None
         self.progress_label = None
@@ -182,9 +190,9 @@ class MainWindow(QMainWindow):
 
     def _setup_window_properties(self) -> None:
         """Configure basic window properties."""
-        self.setWindowTitle("ASSELA")
+        self.setWindowTitle("ACCELA")
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 900, 640)
 
         icon_path = Paths.resource("logo/icon.ico")
         if icon_path.exists():
@@ -273,6 +281,7 @@ class MainWindow(QMainWindow):
     def _setup_ui(self) -> None:
         """Setup the main UI components."""
         self.central_widget = QWidget()
+        self.central_widget.setObjectName("AppRoot")
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget)
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -363,27 +372,43 @@ class MainWindow(QMainWindow):
     def _create_main_content(self) -> None:
         """Create the main content area with drop zone."""
         self.main_container = QWidget()
+        self.main_container.setObjectName("MainSurface")
         self.main_container.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
         self.layout.addWidget(self.main_container, 3)
 
         self.main_layout = QVBoxLayout(self.main_container)
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.setSpacing(0)
+        self.main_layout.setContentsMargins(14, 12, 14, 8)
+        self.main_layout.setSpacing(10)
 
         self._create_drop_zone()
         self._create_progress_section()
 
     def _create_drop_zone(self) -> None:
         """Create the drag and drop area."""
-        self.drop_zone_container = QWidget()
+        self.drop_zone_container = QFrame()
+        self.drop_zone_container.setObjectName("DropCard")
+        self.drop_zone_container.setProperty("dropActive", False)
         self.drop_zone_container.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
         self.drop_zone_layout = QVBoxLayout(self.drop_zone_container)
-        self.drop_zone_layout.setContentsMargins(16, 8, 16, 8)
-        self.drop_zone_layout.setSpacing(6)
+        self.drop_zone_layout.setContentsMargins(18, 13, 18, 16)
+        self.drop_zone_layout.setSpacing(8)
+
+        self.drop_zone_header = QWidget()
+        drop_header_layout = QHBoxLayout(self.drop_zone_header)
+        drop_header_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.node_label = QLabel("WIRED ACCESS NODE  //  07")
+        self.node_label.setObjectName("EyebrowLabel")
+        drop_header_layout.addWidget(self.node_label)
+        drop_header_layout.addStretch()
+
+        self.connection_badge = QLabel("●  STANDBY")
+        self.connection_badge.setObjectName("StatusPill")
+        drop_header_layout.addWidget(self.connection_badge)
 
         self.drop_zone_gif = ScaledLabel()
         self.drop_zone_gif.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -393,6 +418,7 @@ class MainWindow(QMainWindow):
         )
 
         self.drop_text_label = ScaledFontLabel("Drop manifest ZIP here")
+        self.drop_text_label.setObjectName("HeroTitle")
         self.drop_text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.drop_text_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
@@ -403,6 +429,7 @@ class MainWindow(QMainWindow):
         self.drop_hint_label = QLabel(
             "Choose a ZIP below, find a game, or review installed games and updates."
         )
+        self.drop_hint_label.setObjectName("MutedLabel")
         self.drop_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.drop_hint_label.setWordWrap(True)
 
@@ -413,6 +440,7 @@ class MainWindow(QMainWindow):
         idle_actions_layout.addStretch()
 
         self.choose_zip_button = QPushButton("Choose ZIP…")
+        self.choose_zip_button.setObjectName("PrimaryButton")
         self.choose_zip_button.setToolTip("Add one or more manifest ZIPs")
         self.choose_zip_button.clicked.connect(self.open_zip_picker)
         idle_actions_layout.addWidget(self.choose_zip_button)
@@ -428,11 +456,21 @@ class MainWindow(QMainWindow):
         idle_actions_layout.addWidget(self.library_button)
 
         self.idle_log_button = QPushButton("Activity Log")
+        self.idle_log_button.setObjectName("GhostButton")
         self.idle_log_button.setToolTip("Show technical download details")
         self.idle_log_button.clicked.connect(self.toggle_activity_log)
         idle_actions_layout.addWidget(self.idle_log_button)
         idle_actions_layout.addStretch()
 
+        for button in (
+            self.choose_zip_button,
+            self.find_game_button,
+            self.library_button,
+            self.idle_log_button,
+        ):
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.drop_zone_layout.addWidget(self.drop_zone_header)
         self.drop_zone_layout.addWidget(self.drop_zone_gif, 1)
         self.drop_zone_layout.addWidget(self.drop_text_label)
         self.drop_zone_layout.addWidget(self.drop_hint_label)
@@ -441,10 +479,22 @@ class MainWindow(QMainWindow):
 
     def _create_progress_section(self) -> None:
         """Create the progress bar and compact activity summary."""
-        self.progress_container = QWidget()
+        self.progress_container = QFrame()
+        self.progress_container.setObjectName("ActivityCard")
         self.progress_layout = QVBoxLayout(self.progress_container)
-        self.progress_layout.setContentsMargins(20, 4, 20, 8)
-        self.progress_layout.setSpacing(4)
+        self.progress_layout.setContentsMargins(16, 11, 16, 12)
+        self.progress_layout.setSpacing(7)
+
+        activity_header = QHBoxLayout()
+        activity_header.setContentsMargins(0, 0, 0, 0)
+        self.activity_section_label = QLabel("TRANSFER TELEMETRY")
+        self.activity_section_label.setObjectName("SectionTitle")
+        activity_header.addWidget(self.activity_section_label)
+        activity_header.addStretch()
+        self.activity_live_label = QLabel("LIVE LINK")
+        self.activity_live_label.setObjectName("StatusPill")
+        activity_header.addWidget(self.activity_live_label)
+        self.progress_layout.addLayout(activity_header)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
@@ -458,16 +508,19 @@ class MainWindow(QMainWindow):
         progress_meta_layout.setContentsMargins(0, 0, 0, 0)
         progress_meta_layout.setSpacing(12)
 
-        self.progress_label = QLabel("Progress · 0%")
+        self.progress_label = QLabel("PROGRESS  //  00%")
+        self.progress_label.setObjectName("TelemetryLabel")
         self.progress_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         progress_meta_layout.addWidget(self.progress_label)
 
-        self.speed_label = QLabel("Network speed · waiting")
+        self.speed_label = QLabel("NETWORK  //  WAITING")
+        self.speed_label.setObjectName("TelemetryLabel")
         self.speed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.speed_label.setVisible(False)
         progress_meta_layout.addWidget(self.speed_label, 1)
 
-        self.queue_summary_label = QLabel("Queue · 0 waiting")
+        self.queue_summary_label = QLabel("QUEUE  //  0 WAITING")
+        self.queue_summary_label.setObjectName("TelemetryLabel")
         self.queue_summary_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         progress_meta_layout.addWidget(self.queue_summary_label)
 
@@ -475,17 +528,21 @@ class MainWindow(QMainWindow):
         self.progress_layout.addWidget(self.progress_meta_widget)
 
         self.main_layout.addWidget(self.progress_container, 1)
+        self.progress_container.setVisible(False)
 
     def _create_bottom_section(self) -> None:
         """Create the bottom section with queue and logs."""
         self.bottom_widget = QWidget()
+        self.bottom_widget.setObjectName("BottomRegion")
         self.bottom_layout = QHBoxLayout(self.bottom_widget)
-        self.bottom_layout.setContentsMargins(5, 5, 5, 5)
+        self.bottom_layout.setContentsMargins(14, 4, 14, 12)
+        self.bottom_layout.setSpacing(10)
 
         self.ui_state.setup_queue_panel()
         self.bottom_layout.addWidget(self.ui_state.queue_widget, 1)
 
         self.log_output = QTextEdit()
+        self.log_output.setObjectName("ActivityLog")
         self.log_output.setReadOnly(True)
         self.log_output.setPlaceholderText("Technical activity will appear here.")
         self.log_output.setVisible(False)
@@ -499,12 +556,12 @@ class MainWindow(QMainWindow):
     def _update_progress_label(self, value: int) -> None:
         """Keep an accessible percentage beside the slim progress bar."""
         if self.progress_label:
-            self.progress_label.setText(f"Progress · {value}%")
+            self.progress_label.setText(f"PROGRESS  //  {value:02d}%")
 
     def set_queue_count(self, count: int) -> None:
         """Show the number of jobs waiting behind the active download."""
         if self.queue_summary_label:
-            self.queue_summary_label.setText(f"Queue · {count} waiting")
+            self.queue_summary_label.setText(f"QUEUE  //  {count} WAITING")
 
     def set_queue_panel_visible(self, visible: bool) -> None:
         """Show or hide the queue without affecting the optional activity log."""
@@ -537,6 +594,7 @@ class MainWindow(QMainWindow):
 
     def show_idle_state(self) -> None:
         """Restore the welcoming drop target after the queue finishes."""
+        self.connection_badge.setText("●  STANDBY")
         self.drop_text_label.setText("Drop manifest ZIP here")
         self.drop_hint_label.setText(
             "Choose a ZIP below, find a game, or review installed games and updates."
@@ -544,21 +602,28 @@ class MainWindow(QMainWindow):
         self.idle_actions_widget.setVisible(True)
         self.progress_bar.setVisible(False)
         self.progress_meta_widget.setVisible(False)
+        self.progress_container.setVisible(False)
         self.speed_label.setVisible(False)
 
     def show_queued_state(self) -> None:
         """Show the brief handoff state before a queued job starts."""
+        self.connection_badge.setText("●  QUEUED")
+        self.activity_live_label.setText("BUFFERING")
         self.drop_text_label.setText("Download queued")
         self.drop_hint_label.setText("Preparing the next manifest ZIP…")
         self.idle_actions_widget.setVisible(False)
         self.progress_bar.setVisible(False)
-        self.progress_label.setText("Progress · waiting")
+        self.progress_label.setText("PROGRESS  //  WAITING")
+        self.progress_container.setVisible(True)
         self.progress_meta_widget.setVisible(True)
         self.speed_label.setVisible(False)
 
     def show_active_state(self) -> None:
         """Switch the drop target into a focused active-job view."""
+        self.connection_badge.setText("●  LIVE")
+        self.activity_live_label.setText("LIVE LINK")
         self.idle_actions_widget.setVisible(False)
+        self.progress_container.setVisible(True)
         self.progress_meta_widget.setVisible(True)
 
     def set_activity(self, game_name: str, detail: str) -> None:
@@ -574,7 +639,7 @@ class MainWindow(QMainWindow):
     def set_download_speed(self, speed_text: str) -> None:
         """Normalize the worker's speed text for the compact summary row."""
         value = speed_text.removeprefix("Download Speed:").strip()
-        self.speed_label.setText(f"Network speed · {value}")
+        self.speed_label.setText(f"NETWORK  //  {value}")
 
     def open_zip_picker(self) -> None:
         """Offer a keyboard-friendly alternative to dragging manifest ZIPs."""
@@ -616,19 +681,25 @@ class MainWindow(QMainWindow):
         self._update_progress_bar_style()
 
     def _update_progress_bar_style(self) -> None:
-        """Update progress bar styling."""
+        """Update progress bar styling for the current custom palette."""
+        colors = surface_colors(self.background_color, self.accent_color)
         self.progress_bar.setStyleSheet(
             f"""
             QProgressBar {{
-                max-height: 10px;
-                border: 1px solid {self.accent_color};
+                min-height: 9px;
+                max-height: 9px;
+                background-color: {colors['background_deep']};
+                border: 1px solid {colors['border_hot']};
                 border-radius: 5px;
                 text-align: center;
-                color: #FFFFFF;
             }}
             QProgressBar::chunk {{
-                background-color: {self.accent_color};
-                border-radius: 5px;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {colors['accent']},
+                    stop:1 {colors['accent_light']}
+                );
+                border-radius: 4px;
             }}
         """
         )
@@ -670,9 +741,15 @@ class MainWindow(QMainWindow):
         )
 
         if has_zip:
+            self._set_drop_zone_active(True)
             event.acceptProposedAction()
 
+    def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:
+        self._set_drop_zone_active(False)
+        super().dragLeaveEvent(event)
+
     def dropEvent(self, event: QDropEvent) -> None:
+        self._set_drop_zone_active(False)
         urls = event.mimeData().urls()
         new_jobs = [
             url.toLocalFile()
@@ -686,6 +763,16 @@ class MainWindow(QMainWindow):
         logger.info(f"Added {len(new_jobs)} file(s) to the queue via drag-drop.")
         for job_path in new_jobs:
             self.job_queue.add_job(job_path)
+
+        event.acceptProposedAction()
+
+    def _set_drop_zone_active(self, active: bool) -> None:
+        """Repaint the drop card when a manifest is dragged over it."""
+        if not self.drop_zone_container:
+            return
+        self.drop_zone_container.setProperty("dropActive", active)
+        self.drop_zone_container.style().unpolish(self.drop_zone_container)
+        self.drop_zone_container.style().polish(self.drop_zone_container)
 
     def closeEvent(self, event) -> None:
         """Handle application shutdown."""

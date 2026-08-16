@@ -150,7 +150,7 @@ class TaskManager(QObject):
         if self.main_window:
             self.main_window.progress_bar.setVisible(True)
             self.main_window.progress_bar.setRange(0, 0)
-            self.main_window.progress_label.setText("Progress · preparing")
+            self.main_window.progress_label.setText("PROGRESS  //  PREPARING")
             self.main_window.speed_label.setVisible(False)
             self._set_job_stage("Reading manifest ZIP…")
 
@@ -327,7 +327,7 @@ class TaskManager(QObject):
         self.main_window.progress_bar.setRange(0, 100)
         self.main_window.progress_bar.setValue(0)
         self.main_window.speed_label.setVisible(True)
-        self.main_window.speed_label.setText("Network speed · starting…")
+        self.main_window.speed_label.setText("NETWORK  //  STARTING…")
 
         self.download_task = DownloadDepotsTask()
         self.download_task.progress.connect(logger.info)
@@ -381,7 +381,7 @@ class TaskManager(QObject):
     def _start_speed_monitor(self):
         if not SpeedMonitorTask.is_available():
             self.main_window.speed_label.setText(
-                "Network speed · unavailable"
+                "NETWORK  //  UNAVAILABLE"
             )
             return
 
@@ -1721,7 +1721,7 @@ class TaskManager(QObject):
             if next_paused_state:
                 self.main_window.ui_state.pause_button.setText("Resume download")
                 self._set_job_stage(f"Paused · {self._current_depot_status}")
-                self.main_window.speed_label.setText("Network speed · paused")
+                self.main_window.speed_label.setText("NETWORK  //  PAUSED")
             else:
                 self.main_window.ui_state.pause_button.setText("Pause download")
                 self._set_job_stage(self._current_depot_status)
