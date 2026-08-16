@@ -552,6 +552,7 @@ class MainWindow(QMainWindow):
         self.drop_hint_label.setText("Preparing the next manifest ZIP…")
         self.idle_actions_widget.setVisible(False)
         self.progress_bar.setVisible(False)
+        self.progress_label.setText("Progress · waiting")
         self.progress_meta_widget.setVisible(True)
         self.speed_label.setVisible(False)
 

@@ -349,12 +349,12 @@ class TaskManager(QObject):
         self.is_download_paused = False
         pause_available = self.download_task.supports_pause()
         self.main_window.ui_state.pause_button.setText(
-            "Pause starting…" if pause_available else "Pause unavailable"
+            "Pause download" if pause_available else "Pause unavailable"
         )
         self.main_window.ui_state.pause_button.setEnabled(False)
         if pause_available:
             self.main_window.ui_state.pause_button.setToolTip(
-                "Pause the active DepotDownloader process"
+                "Available once the depot download starts"
             )
         else:
             self.main_window.ui_state.pause_button.setToolTip(
@@ -404,6 +404,9 @@ class TaskManager(QObject):
 
         if self.download_task and self.download_task.supports_pause():
             self.main_window.ui_state.pause_button.setText("Pause download")
+            self.main_window.ui_state.pause_button.setToolTip(
+                "Pause the active DepotDownloader process"
+            )
             self.main_window.ui_state.pause_button.setEnabled(True)
 
     def _stop_speed_monitor(self):
