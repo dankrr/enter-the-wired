@@ -342,6 +342,7 @@ class TaskManager(QObject):
         worker = self.download_runner.run(
             self.download_task.run, self.game_data, selected_depots, dest_path
         )
+        worker.finished.connect(self._on_download_worker_finished)
         worker.error.connect(self._handle_task_error)
 
         self._start_speed_monitor()
@@ -427,14 +428,29 @@ class TaskManager(QObject):
     def _on_download_task_stopped(self):
         self.download_runner = None
         self.is_awaiting_download_stop = False
+        if self.is_cancelling:
+            self._finish_cancelled_download()
+            return
         self.main_window.job_queue.check_if_safe_to_start_next_job()
+
+    def _on_download_worker_finished(self, _result=None):
+        """Finish a canceled job when the downloader exits without completion."""
+        if self.is_cancelling:
+            self._finish_cancelled_download()
+
+    def _finish_cancelled_download(self):
+        """Complete cancellation exactly once regardless of worker exit path."""
+        if not self.is_cancelling or not self.is_processing:
+            return
+
+        if self._delete_files_on_cancel:
+            self._cleanup_cancelled_job_files()
+        self.job_finished()
 
     def _on_download_complete(self):
         """Handle download completion"""
         if self.is_cancelling:
-            if self._delete_files_on_cancel:
-                self._cleanup_cancelled_job_files()
-            self.job_finished()
+            self._finish_cancelled_download()
             return
 
         self._stop_speed_monitor()
