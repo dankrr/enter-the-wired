@@ -408,12 +408,15 @@ class TaskManager(QObject):
 
     def _stop_speed_monitor(self):
         if self.speed_monitor_task:
+            self.is_awaiting_speed_monitor_stop = (
+                self.speed_monitor_runner is not None
+            )
             self.speed_monitor_task.stop()
             self.speed_monitor_task = None
+        elif self.speed_monitor_runner is not None:
+            self.is_awaiting_speed_monitor_stop = True
         else:
-            if self.is_awaiting_speed_monitor_stop:
-                self.is_awaiting_speed_monitor_stop = False
-                self.main_window.job_queue.check_if_safe_to_start_next_job()
+            self.is_awaiting_speed_monitor_stop = False
 
     def _on_speed_monitor_stopped(self):
         self.speed_monitor_runner = None
@@ -1651,11 +1654,7 @@ class TaskManager(QObject):
         self.is_cancelling = False
         self._delete_files_on_cancel = None
 
-        if self.speed_monitor_task:
-            self.is_awaiting_speed_monitor_stop = True
-            self._stop_speed_monitor()
-        else:
-            self.is_awaiting_speed_monitor_stop = False
+        self._stop_speed_monitor()
 
         if self.download_runner is None:
             self.is_awaiting_download_stop = False
@@ -1723,6 +1722,8 @@ class TaskManager(QObject):
         if not self.download_task or not self.current_job:
             return
 
+        active_download = self.download_task
+        active_job = self.current_job
         game_name = self._get_active_game_name()
         reply = QMessageBox.question(
             self.main_window,
@@ -1735,16 +1736,25 @@ class TaskManager(QObject):
         if reply == QMessageBox.StandardButton.No:
             return
 
+        if not self._is_current_download(active_download, active_job):
+            return
+
+        existing_install = self._detect_existing_installation()
+        delete_files = self._confirm_delete_on_cancel(existing_install)
+
+        # Both questions run nested Qt event loops. The download may have
+        # completed while the user was deciding; never act on a newer job.
+        if not self._is_current_download(active_download, active_job):
+            return
+
         logger.info(f"--- Cancelling job: {os.path.basename(self.current_job)} ---")
         self.is_cancelling = True
+        self._delete_files_on_cancel = delete_files
         self._set_job_stage("Cancelling download…")
         self.main_window.ui_state.pause_button.setEnabled(False)
         self.main_window.ui_state.cancel_button.setEnabled(False)
         if self.download_runner is not None:
             self.is_awaiting_download_stop = True
-
-        existing_install = self._detect_existing_installation()
-        self._delete_files_on_cancel = self._confirm_delete_on_cancel(existing_install)
 
         if self.download_task:
             self.download_task.stop()
@@ -1755,6 +1765,14 @@ class TaskManager(QObject):
 
         if self.steamless_task:
             self.steamless_task.stop()
+
+    def _is_current_download(self, download_task, job_path) -> bool:
+        """Guard modal cancel prompts from ever targeting a subsequent job."""
+        return (
+            self.is_processing
+            and self.download_task is download_task
+            and self.current_job == job_path
+        )
 
     def _detect_existing_installation(self) -> bool:
         if not self.current_dest_path or not self.game_data:
