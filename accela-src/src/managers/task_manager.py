@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import signal
 import shutil
 import sys
 import tempfile
@@ -345,7 +346,7 @@ class TaskManager(QObject):
 
         self._start_speed_monitor()
         self.is_download_paused = False
-        pause_available = psutil is not None
+        pause_available = self.download_task.supports_pause()
         self.main_window.ui_state.pause_button.setText(
             "Pause starting…" if pause_available else "Pause unavailable"
         )
@@ -356,7 +357,7 @@ class TaskManager(QObject):
             )
         else:
             self.main_window.ui_state.pause_button.setToolTip(
-                "Pause requires the optional process support package"
+                "Pause is unavailable on this platform"
             )
         self.main_window.ui_state.pause_button.setVisible(True)
         self.main_window.ui_state.cancel_button.setEnabled(True)
@@ -375,7 +376,7 @@ class TaskManager(QObject):
                     logger.error(f"Failed to write app token: {e}")
 
     def _start_speed_monitor(self):
-        if psutil is None:
+        if not SpeedMonitorTask.is_available():
             self.main_window.speed_label.setText(
                 "Network speed · unavailable"
             )
@@ -400,7 +401,7 @@ class TaskManager(QObject):
         self._current_depot_status = f"Depot {depot_id} · {position} of {total}"
         self._set_job_stage(self._current_depot_status)
 
-        if psutil is not None:
+        if self.download_task and self.download_task.supports_pause():
             self.main_window.ui_state.pause_button.setText("Pause download")
             self.main_window.ui_state.pause_button.setEnabled(True)
 
@@ -1682,7 +1683,7 @@ class TaskManager(QObject):
     def toggle_pause(self):
         if (
             not self.download_task
-            or psutil is None
+            or not self.download_task.supports_pause()
             or not self.download_task.process
         ):
             return
@@ -1789,20 +1790,29 @@ class TaskManager(QObject):
     def _kill_download_process(self):
         if self.download_task and self.download_task.process:
             if psutil is None:
-                logger.error("psutil unavailable; cannot terminate process safely.")
-                return
-            try:
-                p = psutil.Process(self.download_task.process.pid)
-                for child in p.children(recursive=True):
-                    try:
-                        child.kill()
-                    except psutil.NoSuchProcess:
-                        pass
-                p.kill()
-            except psutil.NoSuchProcess:
-                pass
-            except Exception as e:
-                logger.error(f"Failed to kill process: {e}")
+                process = self.download_task.process
+                try:
+                    if os.name == "posix" and hasattr(os, "killpg"):
+                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                    else:
+                        process.kill()
+                except ProcessLookupError:
+                    pass
+                except OSError as e:
+                    logger.error(f"Failed to stop download process: {e}")
+            else:
+                try:
+                    p = psutil.Process(self.download_task.process.pid)
+                    for child in p.children(recursive=True):
+                        try:
+                            child.kill()
+                        except psutil.NoSuchProcess:
+                            pass
+                    p.kill()
+                except psutil.NoSuchProcess:
+                    pass
+                except Exception as e:
+                    logger.error(f"Failed to kill process: {e}")
 
             self.download_task.process = None
             self.download_task.process_pid = None

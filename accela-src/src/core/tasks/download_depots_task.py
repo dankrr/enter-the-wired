@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import signal
 import shutil
 import subprocess
 import sys
@@ -19,7 +20,7 @@ try:
     import psutil
 except ImportError:
     logging.info(
-        "Optional process support is unavailable; pausing/resuming downloads is disabled."
+        "Optional process support is unavailable; using native controls where supported."
     )
     psutil = None
 
@@ -111,6 +112,7 @@ class DownloadDepotsTask(QObject):
                     stderr=subprocess.STDOUT,
                     text=False,
                     creationflags=creation_flags,
+                    start_new_session=os.name == "posix",
                 )
                 self.depot_started.emit(str(depot_id), i + 1, total_depots)
 
@@ -404,15 +406,33 @@ class DownloadDepotsTask(QObject):
         """
         Pauses or resumes the download process tree.
         """
-        if not psutil:
-            logger.error("psutil not found. Cannot pause or resume.")
-            raise RuntimeError("psutil library is not loaded.")
-
         if not self.process:
             logger.warning("Attempted to pause/resume, but no process is running.")
             return
 
         target_action = "pausing" if pause else "resuming"
+
+        if psutil is None:
+            if not self.supports_pause():
+                raise RuntimeError("Pause and resume are unavailable on this platform.")
+
+            try:
+                process_group = os.getpgid(self.process.pid)
+                os.killpg(
+                    process_group,
+                    signal.SIGSTOP if pause else signal.SIGCONT,
+                )
+                result_status = "paused" if pause else "resumed"
+                logger.info(f"Download process group {result_status}.")
+                return
+            except ProcessLookupError:
+                logger.warning("Download process no longer exists.")
+                self.process = None
+                return
+            except OSError as e:
+                raise RuntimeError(
+                    f"Failed while {target_action} the download process group: {e}"
+                ) from e
 
         try:
             parent = psutil.Process(self.process.pid)
@@ -439,3 +459,13 @@ class DownloadDepotsTask(QObject):
         except psutil.Error as e:
             logger.error(f"An error occurred while {target_action} process: {e}")
             raise
+
+    @staticmethod
+    def supports_pause() -> bool:
+        """Return whether this platform can pause a downloader process tree."""
+        return psutil is not None or (
+            os.name == "posix"
+            and hasattr(os, "killpg")
+            and hasattr(signal, "SIGSTOP")
+            and hasattr(signal, "SIGCONT")
+        )
