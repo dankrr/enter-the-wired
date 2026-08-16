@@ -167,7 +167,9 @@ class BottomTitleBar(QFrame):
         layout.addWidget(self.workshop_button)
 
         self.game_library_button = self._create_svg_button(
-            BOOK_SVG, getattr(parent, "open_game_library", None), "Game Library"
+            BOOK_SVG,
+            getattr(parent, "open_game_library", None),
+            "Library & Updates",
         )
         layout.addWidget(self.game_library_button)
 

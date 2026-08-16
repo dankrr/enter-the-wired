@@ -2,6 +2,7 @@ import os
 import random
 import logging
 from typing import cast
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QMovie, QFont
 from PyQt6.QtWidgets import (
     QWidget,
@@ -35,12 +36,16 @@ class UIStateManager:
 
         # Queue UI elements
         self.queue_widget = None
+        self.queue_title_label = None
+        self.queue_count_label = None
+        self.queue_empty_label = None
         self.queue_list_widget = None
         self.queue_move_up_button = None
         self.queue_move_down_button = None
         self.queue_remove_button = None
         self.pause_button = None
         self.cancel_button = None
+        self.queue_log_button = None
 
         self.disable_default_gifs = self.settings.value("disable_default_gifs", False)
 
@@ -239,55 +244,102 @@ class UIStateManager:
         self.queue_widget = QWidget()
         queue_layout = QVBoxLayout(self.queue_widget)
         queue_layout.setContentsMargins(0, 0, 5, 0)
+        queue_layout.setSpacing(6)
 
-        # Queue label
-        queue_label = QLabel("Download Queue")
-        queue_label.setStyleSheet(f"color: {self.main_window.accent_color};")
-        queue_layout.addWidget(queue_label)
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Queue list
+        self.queue_title_label = QLabel("UP NEXT")
+        self.queue_title_label.setStyleSheet(
+            f"color: {self.main_window.accent_color}; font-weight: bold;"
+        )
+        header_layout.addWidget(self.queue_title_label)
+
+        self.queue_count_label = QLabel("0 waiting")
+        header_layout.addWidget(self.queue_count_label)
+        header_layout.addStretch()
+
+        self.queue_log_button = QPushButton("Activity Log")
+        self.queue_log_button.setToolTip("Show technical download details")
+        self.queue_log_button.clicked.connect(
+            self.main_window.toggle_activity_log
+        )
+        header_layout.addWidget(self.queue_log_button)
+        queue_layout.addLayout(header_layout)
+
         self.queue_list_widget = QListWidget()
         self.queue_list_widget.setToolTip(
-            "Current download queue. Select an item to move it."
+            "Downloads waiting behind the active game. Select one to reorder it."
+        )
+        self.queue_list_widget.currentRowChanged.connect(
+            self.update_queue_button_states
         )
         queue_layout.addWidget(self.queue_list_widget)
 
-        # Queue buttons
+        self.queue_empty_label = QLabel("No other downloads queued.")
+        self.queue_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        queue_layout.addWidget(self.queue_empty_label)
+
         self._setup_queue_buttons(queue_layout)
+        self.update_queue_summary(0)
 
     def _setup_queue_buttons(self, parent_layout):
         """Setup queue control buttons"""
         queue_button_layout = QHBoxLayout()
 
-        self.queue_move_up_button = QPushButton("Move Up")
+        self.queue_move_up_button = QPushButton("↑ Earlier")
         self.queue_move_up_button.clicked.connect(
             self.main_window.job_queue.move_item_up
         )
         queue_button_layout.addWidget(self.queue_move_up_button)
 
-        self.queue_move_down_button = QPushButton("Move Down")
+        self.queue_move_down_button = QPushButton("↓ Later")
         self.queue_move_down_button.clicked.connect(
             self.main_window.job_queue.move_item_down
         )
         queue_button_layout.addWidget(self.queue_move_down_button)
 
-        self.queue_remove_button = QPushButton("Remove")
+        self.queue_remove_button = QPushButton("Remove queued")
         self.queue_remove_button.clicked.connect(self.main_window.job_queue.remove_item)
         queue_button_layout.addWidget(self.queue_remove_button)
 
-        self.pause_button = QPushButton("Pause")
+        parent_layout.addLayout(queue_button_layout)
+
+        active_button_layout = QHBoxLayout()
+
+        self.pause_button = QPushButton("Pause download")
         self.pause_button.clicked.connect(self.main_window.task_manager.toggle_pause)
         self.pause_button.setVisible(False)
-        queue_button_layout.addWidget(self.pause_button)
+        active_button_layout.addWidget(self.pause_button)
 
-        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button = QPushButton("Cancel download")
         self.cancel_button.clicked.connect(
             self.main_window.task_manager.cancel_current_job
         )
         self.cancel_button.setVisible(False)
-        queue_button_layout.addWidget(self.cancel_button)
+        active_button_layout.addWidget(self.cancel_button)
 
-        parent_layout.addLayout(queue_button_layout)
+        parent_layout.addLayout(active_button_layout)
+
+    def update_queue_summary(self, count: int):
+        """Update queue copy and controls for the waiting-job count."""
+        self.queue_count_label.setText(f"{count} waiting")
+        self.queue_list_widget.setVisible(count > 0)
+        self.queue_empty_label.setVisible(count == 0)
+        self.main_window.set_queue_count(count)
+        self.update_queue_button_states()
+
+    def update_queue_button_states(self, _row=None):
+        """Only enable queue actions that apply to the current selection."""
+        count = self.queue_list_widget.count()
+        row = self.queue_list_widget.currentRow()
+        has_selection = 0 <= row < count
+
+        self.queue_move_up_button.setEnabled(has_selection and row > 0)
+        self.queue_move_down_button.setEnabled(
+            has_selection and row < count - 1
+        )
+        self.queue_remove_button.setEnabled(has_selection)
 
     def apply_style_settings(self):
         """Apply current style settings to UI"""
@@ -366,11 +418,19 @@ class UIStateManager:
         # Drop text label
         self.main_window.drop_text_label.setStyleSheet(accent_style)
 
-        # Queue label
-        if hasattr(self, "queue_widget") and self.queue_widget:
-            queue_label = self.queue_widget.findChild(QLabel)
+        # Queue labels
+        for queue_label in (
+            self.queue_title_label,
+            self.queue_count_label,
+            self.queue_empty_label,
+        ):
             if queue_label:
                 queue_label.setStyleSheet(accent_style)
+
+        if self.queue_title_label:
+            self.queue_title_label.setStyleSheet(
+                f"color: {self.main_window.accent_color}; font-weight: bold;"
+            )
 
         # Progress bar
         self.main_window.update_progress_bar_style()
@@ -385,17 +445,15 @@ class UIStateManager:
     def update_queue_visibility(self, is_processing, has_jobs):
         """Update queue visibility based on current state"""
         if not is_processing and not has_jobs:
-            if self.queue_widget:
-                self.queue_widget.setVisible(False)
-            self.main_window.drop_text_label.setText("Drag and Drop Zip here")
+            self.main_window.set_queue_panel_visible(False)
+            self.main_window.show_idle_state()
             self._show_main_gif()
         else:
-            if self.queue_widget:
-                self.queue_widget.setVisible(True)
-            if not is_processing:
-                self.main_window.drop_text_label.setText(
-                    "Queue idle. Ready for next job."
-                )
+            self.main_window.set_queue_panel_visible(True)
+            if is_processing:
+                self.main_window.show_active_state()
+            else:
+                self.main_window.show_queued_state()
 
     def _show_main_gif(self):
         """Show the main GIF animation"""

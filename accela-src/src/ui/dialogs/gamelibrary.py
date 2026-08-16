@@ -250,7 +250,7 @@ class GameLibraryDialog(QDialog):
 
     def _setup_window(self) -> None:
         """Configure main window properties and styles."""
-        self.setWindowTitle("Game Library")
+        self.setWindowTitle("Game Library & Updates")
         self.setMinimumWidth(600)
         self.setMinimumHeight(400)
         self.resize(750, 500)
@@ -297,7 +297,7 @@ class GameLibraryDialog(QDialog):
         # --- Top Bar ---
         top_layout = QHBoxLayout()
 
-        self.scan_button = QPushButton("Scan Libraries")
+        self.scan_button = QPushButton("Scan && Check Updates")
         self.scan_button.clicked.connect(self._scan_for_games)
         top_layout.addWidget(self.scan_button)
 
@@ -365,7 +365,7 @@ class GameLibraryDialog(QDialog):
 
     def _on_scan_complete(self, count: int) -> None:
         self.scan_button.setEnabled(True)
-        self.scan_button.setText("Scan Libraries")
+        self.scan_button.setText("Scan && Check Updates")
 
         if count > 0:
             self._checking_updates = True

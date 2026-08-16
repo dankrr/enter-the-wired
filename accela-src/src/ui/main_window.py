@@ -14,10 +14,12 @@ from PyQt6.QtGui import (
     QShortcut,
 )
 from PyQt6.QtWidgets import (
+    QFileDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
     QProgressBar,
+    QPushButton,
     QSizePolicy,
     QTextEdit,
     QVBoxLayout,
@@ -150,13 +152,24 @@ class MainWindow(QMainWindow):
         self.drop_zone_layout = None
         self.drop_zone_gif = None
         self.drop_text_label = None
+        self.drop_hint_label = None
+        self.idle_actions_widget = None
+        self.choose_zip_button = None
+        self.find_game_button = None
+        self.library_button = None
+        self.idle_log_button = None
         self.progress_container = None
         self.progress_layout = None
         self.progress_bar = None
+        self.progress_meta_widget = None
+        self.progress_label = None
         self.speed_label = None
+        self.queue_summary_label = None
         self.bottom_widget = None
         self.bottom_layout = None
         self.log_output = None
+        self.log_visible = False
+        self.queue_panel_visible = False
 
         self._setup_window_properties()
         self._initialize_managers()
@@ -369,8 +382,8 @@ class MainWindow(QMainWindow):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
         self.drop_zone_layout = QVBoxLayout(self.drop_zone_container)
-        self.drop_zone_layout.setContentsMargins(0, 0, 0, 0)
-        self.drop_zone_layout.setSpacing(0)
+        self.drop_zone_layout.setContentsMargins(16, 8, 16, 8)
+        self.drop_zone_layout.setSpacing(6)
 
         self.drop_zone_gif = ScaledLabel()
         self.drop_zone_gif.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -379,33 +392,87 @@ class MainWindow(QMainWindow):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
 
-        self.drop_text_label = ScaledFontLabel("Drag and Drop Zip here")
+        self.drop_text_label = ScaledFontLabel("Drop manifest ZIP here")
         self.drop_text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.drop_text_label.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         self.drop_text_label.setMinimumHeight(32)
         self.drop_text_label.setMaximumHeight(48)
 
-        self.drop_zone_layout.addWidget(self.drop_zone_gif, 9)
-        self.drop_zone_layout.addWidget(self.drop_text_label, 1)
+        self.drop_hint_label = QLabel(
+            "Choose a ZIP below, find a game, or review installed games and updates."
+        )
+        self.drop_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.drop_hint_label.setWordWrap(True)
+
+        self.idle_actions_widget = QWidget()
+        idle_actions_layout = QHBoxLayout(self.idle_actions_widget)
+        idle_actions_layout.setContentsMargins(0, 2, 0, 0)
+        idle_actions_layout.setSpacing(8)
+        idle_actions_layout.addStretch()
+
+        self.choose_zip_button = QPushButton("Choose ZIP…")
+        self.choose_zip_button.setToolTip("Add one or more manifest ZIPs")
+        self.choose_zip_button.clicked.connect(self.open_zip_picker)
+        idle_actions_layout.addWidget(self.choose_zip_button)
+
+        self.find_game_button = QPushButton("Find a Game")
+        self.find_game_button.setToolTip("Search for a game manifest")
+        self.find_game_button.clicked.connect(self.open_fetch_dialog)
+        idle_actions_layout.addWidget(self.find_game_button)
+
+        self.library_button = QPushButton("Library && Updates")
+        self.library_button.setToolTip("Review installed games and available updates")
+        self.library_button.clicked.connect(self.open_game_library)
+        idle_actions_layout.addWidget(self.library_button)
+
+        self.idle_log_button = QPushButton("Activity Log")
+        self.idle_log_button.setToolTip("Show technical download details")
+        self.idle_log_button.clicked.connect(self.toggle_activity_log)
+        idle_actions_layout.addWidget(self.idle_log_button)
+        idle_actions_layout.addStretch()
+
+        self.drop_zone_layout.addWidget(self.drop_zone_gif, 1)
+        self.drop_zone_layout.addWidget(self.drop_text_label)
+        self.drop_zone_layout.addWidget(self.drop_hint_label)
+        self.drop_zone_layout.addWidget(self.idle_actions_widget)
         self.main_layout.addWidget(self.drop_zone_container, 10)
 
     def _create_progress_section(self) -> None:
-        """Create the progress bar and speed label."""
+        """Create the progress bar and compact activity summary."""
         self.progress_container = QWidget()
         self.progress_layout = QVBoxLayout(self.progress_container)
-        self.progress_layout.setContentsMargins(20, 5, 20, 5)
+        self.progress_layout.setContentsMargins(20, 4, 20, 8)
+        self.progress_layout.setSpacing(4)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.valueChanged.connect(self._update_progress_label)
         self._update_progress_bar_style()
         self.progress_layout.addWidget(self.progress_bar)
 
-        self.speed_label = QLabel("")
-        self.speed_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.progress_meta_widget = QWidget()
+        progress_meta_layout = QHBoxLayout(self.progress_meta_widget)
+        progress_meta_layout.setContentsMargins(0, 0, 0, 0)
+        progress_meta_layout.setSpacing(12)
+
+        self.progress_label = QLabel("Progress · 0%")
+        self.progress_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        progress_meta_layout.addWidget(self.progress_label)
+
+        self.speed_label = QLabel("Network speed · waiting")
+        self.speed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.speed_label.setVisible(False)
-        self.progress_layout.addWidget(self.speed_label)
+        progress_meta_layout.addWidget(self.speed_label, 1)
+
+        self.queue_summary_label = QLabel("Queue · 0 waiting")
+        self.queue_summary_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        progress_meta_layout.addWidget(self.queue_summary_label)
+
+        self.progress_meta_widget.setVisible(False)
+        self.progress_layout.addWidget(self.progress_meta_widget)
 
         self.main_layout.addWidget(self.progress_container, 1)
 
@@ -420,11 +487,104 @@ class MainWindow(QMainWindow):
 
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
+        self.log_output.setPlaceholderText("Technical activity will appear here.")
+        self.log_output.setVisible(False)
         qt_log_handler.new_record.connect(self.log_output.append)
         self.bottom_layout.addWidget(self.log_output, 1)
 
         self.layout.addWidget(self.bottom_widget, 1)
         self.ui_state.queue_widget.setVisible(False)
+        self.bottom_widget.setVisible(False)
+
+    def _update_progress_label(self, value: int) -> None:
+        """Keep an accessible percentage beside the slim progress bar."""
+        if self.progress_label:
+            self.progress_label.setText(f"Progress · {value}%")
+
+    def set_queue_count(self, count: int) -> None:
+        """Show the number of jobs waiting behind the active download."""
+        if self.queue_summary_label:
+            self.queue_summary_label.setText(f"Queue · {count} waiting")
+
+    def set_queue_panel_visible(self, visible: bool) -> None:
+        """Show or hide the queue without affecting the optional activity log."""
+        self.queue_panel_visible = visible
+        if visible and self.height() < 360:
+            self.resize(self.width(), 360)
+        if self.ui_state and self.ui_state.queue_widget:
+            self.ui_state.queue_widget.setVisible(visible)
+        self._update_bottom_panel_visibility()
+
+    def toggle_activity_log(self) -> None:
+        """Keep diagnostics available without making them the main interface."""
+        self.log_visible = not self.log_visible
+        if self.log_visible and self.height() < 400:
+            self.resize(self.width(), 400)
+        self._update_bottom_panel_visibility()
+
+    def _update_bottom_panel_visibility(self) -> None:
+        if not self.bottom_widget or not self.log_output:
+            return
+
+        self.log_output.setVisible(self.log_visible)
+        self.bottom_widget.setVisible(self.queue_panel_visible or self.log_visible)
+
+        button_text = "Hide Activity Log" if self.log_visible else "Activity Log"
+        if self.idle_log_button:
+            self.idle_log_button.setText(button_text)
+        if self.ui_state and self.ui_state.queue_log_button:
+            self.ui_state.queue_log_button.setText(button_text)
+
+    def show_idle_state(self) -> None:
+        """Restore the welcoming drop target after the queue finishes."""
+        self.drop_text_label.setText("Drop manifest ZIP here")
+        self.drop_hint_label.setText(
+            "Choose a ZIP below, find a game, or review installed games and updates."
+        )
+        self.idle_actions_widget.setVisible(True)
+        self.progress_bar.setVisible(False)
+        self.progress_meta_widget.setVisible(False)
+        self.speed_label.setVisible(False)
+
+    def show_queued_state(self) -> None:
+        """Show the brief handoff state before a queued job starts."""
+        self.drop_text_label.setText("Download queued")
+        self.drop_hint_label.setText("Preparing the next manifest ZIP…")
+        self.idle_actions_widget.setVisible(False)
+        self.progress_bar.setVisible(False)
+        self.progress_meta_widget.setVisible(True)
+        self.speed_label.setVisible(False)
+
+    def show_active_state(self) -> None:
+        """Switch the drop target into a focused active-job view."""
+        self.idle_actions_widget.setVisible(False)
+        self.progress_meta_widget.setVisible(True)
+
+    def set_activity(self, game_name: str, detail: str) -> None:
+        """Present normal job status without requiring the activity log."""
+        self.show_active_state()
+        self.drop_text_label.setText(game_name or "Preparing download")
+        self.drop_hint_label.setText(detail)
+
+    def set_activity_detail(self, detail: str) -> None:
+        if self.drop_hint_label:
+            self.drop_hint_label.setText(detail)
+
+    def set_download_speed(self, speed_text: str) -> None:
+        """Normalize the worker's speed text for the compact summary row."""
+        value = speed_text.removeprefix("Download Speed:").strip()
+        self.speed_label.setText(f"Network speed · {value}")
+
+    def open_zip_picker(self) -> None:
+        """Offer a keyboard-friendly alternative to dragging manifest ZIPs."""
+        zip_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Choose Manifest ZIPs",
+            "",
+            "Manifest ZIPs (*.zip)",
+        )
+        for zip_path in zip_paths:
+            self.job_queue.add_job(zip_path)
 
     def update_gif_display(self, enabled: Optional[bool] = None) -> None:
         """Update GIF display visibility and adjust window layout."""
