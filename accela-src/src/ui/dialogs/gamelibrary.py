@@ -1088,6 +1088,7 @@ class GameLibraryDialog(QDialog):
         """Submit the job to the main window queue."""
         metadata = {
             "appid": game_data.get("appid"),
+            "game_name": game_data.get("game_name"),
             "library_path": game_data.get("library_path"),
             "install_path": game_data.get("install_path"),
         }

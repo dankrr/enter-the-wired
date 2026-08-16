@@ -487,7 +487,10 @@ class FetchManifestDialog(QDialog):
         name = self._extract_game_name(game) or "Unknown"
 
         item = QListWidgetItem(f"{name} (AppID: {app_id})")
-        item.setData(Qt.ItemDataRole.UserRole, app_id)
+        item.setData(
+            Qt.ItemDataRole.UserRole,
+            {"appid": app_id, "game_name": name},
+        )
         self.results_list.addItem(item)
 
         self._fetch_item_image(item, app_id)
@@ -527,7 +530,13 @@ class FetchManifestDialog(QDialog):
     # --------------------------
 
     def on_item_double_clicked(self, item):
-        app_id = item.data(Qt.ItemDataRole.UserRole)
+        item_data = item.data(Qt.ItemDataRole.UserRole)
+        if isinstance(item_data, dict):
+            app_id = item_data.get("appid")
+            game_name = item_data.get("game_name")
+        else:
+            app_id = item_data
+            game_name = None
         if not app_id:
             return
 
@@ -535,10 +544,12 @@ class FetchManifestDialog(QDialog):
         self.status_label.setText(f"Downloading manifest for App ID {app_id}...")
 
         worker = self.task_runner.run(morrenus_api.download_manifest, app_id)
-        worker.finished.connect(self.on_download_finished)
+        worker.finished.connect(
+            lambda result, name=game_name: self.on_download_finished(result, name)
+        )
         worker.error.connect(self.on_task_error)
 
-    def on_download_finished(self, result):
+    def on_download_finished(self, result, game_name=None):
         filepath, error_msg = result
 
         if error_msg:
@@ -550,7 +561,8 @@ class FetchManifestDialog(QDialog):
         self.status_label.setText("Download complete! Adding to queue")
 
         if self.parent_window and hasattr(self.parent_window, "job_queue"):
-            self.parent_window.job_queue.add_job(filepath)
+            metadata = {"game_name": game_name} if game_name else None
+            self.parent_window.job_queue.add_job(filepath, metadata)
 
         self.accept()
 

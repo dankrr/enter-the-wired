@@ -5,7 +5,7 @@ import signal
 import subprocess
 import time
 import threading
-from PyQt6.QtWidgets import QMessageBox
+from PyQt6.QtWidgets import QListWidgetItem, QMessageBox
 from PyQt6.QtCore import Qt, QMetaObject, Q_ARG, QTimer, QObject
 
 from core import steam_helpers
@@ -85,7 +85,7 @@ class JobQueueManager(QObject):
             logger.info(
                 f"Removed job from queue: {os.path.basename(removed_job['path'])}"
             )
-            self._update_queue_display()
+            self._update_ui_state()
 
             if current_row < self.main_window.ui_state.queue_list_widget.count():
                 self.main_window.ui_state.queue_list_widget.setCurrentRow(current_row)
@@ -162,10 +162,29 @@ class JobQueueManager(QObject):
 
     def _update_queue_display(self):
         """Update the queue list widget"""
-        self.main_window.ui_state.queue_list_widget.clear()
-        self.main_window.ui_state.queue_list_widget.addItems(
-            [os.path.basename(job["path"]) for job in self.job_queue]
-        )
+        queue_list = self.main_window.ui_state.queue_list_widget
+        queue_list.clear()
+
+        for position, job in enumerate(self.job_queue, start=1):
+            item = QListWidgetItem(
+                f"{position}. {self._get_job_display_name(job)}"
+            )
+            item.setToolTip(job["path"])
+            queue_list.addItem(item)
+
+        self.main_window.ui_state.update_queue_summary(len(self.job_queue))
+
+    @staticmethod
+    def _get_job_display_name(job):
+        """Prefer known game names while retaining a useful ZIP fallback."""
+        metadata = job.get("metadata") or {}
+        game_name = str(metadata.get("game_name") or "").strip()
+        if game_name:
+            return game_name
+
+        filename = os.path.basename(job.get("path") or "")
+        display_name, _ = os.path.splitext(filename)
+        return display_name or filename or "Unknown download"
 
     def _check_if_safe_to_start_next_job(self):
         """Check if it's safe to start the next job"""
