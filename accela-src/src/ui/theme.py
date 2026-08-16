@@ -16,6 +16,60 @@ from utils.paths import Paths
 logger = logging.getLogger(__name__)
 
 
+def blend_color(base: QColor, overlay: QColor, amount: float) -> QColor:
+    """Blend two colors without relying on QColor.lighter() for black tones."""
+    amount = max(0.0, min(1.0, amount))
+    inverse = 1.0 - amount
+    return QColor(
+        round(base.red() * inverse + overlay.red() * amount),
+        round(base.green() * inverse + overlay.green() * amount),
+        round(base.blue() * inverse + overlay.blue() * amount),
+    )
+
+
+def contrast_text_color(color: QColor) -> str:
+    """Choose readable text for a filled accent control."""
+    luminance = (
+        color.red() * 0.299 + color.green() * 0.587 + color.blue() * 0.114
+    )
+    return "#09070A" if luminance >= 145 else "#FFFFFF"
+
+
+def surface_colors(
+    background: Union[str, QColor], accent: Union[str, QColor]
+) -> Dict[str, str]:
+    """Build the layered Wired palette used by application surfaces."""
+    bg = QColor(background)
+    accent_color = QColor(accent)
+    if not bg.isValid():
+        bg = QColor("#080608")
+    if not accent_color.isValid():
+        accent_color = QColor("#C06C84")
+
+    white = QColor("#FFFFFF")
+    neutral = QColor("#A89DA7")
+    danger = QColor("#E7607D")
+
+    return {
+        "background": bg.name(),
+        "background_deep": blend_color(bg, QColor("#000000"), 0.34).name(),
+        "surface": blend_color(bg, accent_color, 0.055).name(),
+        "surface_alt": blend_color(bg, accent_color, 0.105).name(),
+        "surface_strong": blend_color(bg, accent_color, 0.17).name(),
+        "accent_soft": blend_color(bg, accent_color, 0.24).name(),
+        "border": blend_color(bg, accent_color, 0.38).name(),
+        "border_hot": blend_color(bg, accent_color, 0.72).name(),
+        "accent": accent_color.name(),
+        "accent_light": blend_color(accent_color, white, 0.2).name(),
+        "accent_text": contrast_text_color(accent_color),
+        "text": blend_color(accent_color, white, 0.18).name(),
+        "muted": blend_color(bg, neutral, 0.72).name(),
+        "danger": danger.name(),
+        "danger_surface": blend_color(bg, danger, 0.18).name(),
+        "disabled": blend_color(bg, neutral, 0.32).name(),
+    }
+
+
 def normal_palette_colors(
     background_color: QColor, accent_color: QColor
 ) -> Dict[QPalette.ColorRole, QColor]:
@@ -83,157 +137,319 @@ def _apply_stylesheet(
     disabled_bg: QColor,
     disabled_text: QColor,
 ) -> None:
-    """Generate and apply the CSS stylesheet."""
-    bg_effect = bg_color
-    if bg_effect == QColor("#000000"):
-        bg_effect = QColor("#282828")
-
-    accent_light = accent_color.lighter(120).name()
-    bg_light = bg_color.lighter(120).name()
-
-    gradient_border = (
-        f"border-top: 2px solid {accent_light};\n"
-        f"border-bottom: 2px solid {accent_light};\n"
-        f"border-left: 2px solid qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-        f"stop:0 {accent_light}, stop:0.5 {bg_light}, stop:1 {accent_light});\n"
-        f"border-right: 2px solid qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-        f"stop:0 {accent_light}, stop:0.5 {bg_light}, stop:1 {accent_light});"
-    )
-
-    gradient_border_full = (
-        f"border-top: 2px solid {accent_light};\n"
-        f"border-bottom: 2px solid {accent_light};\n"
-        f"border-left: 2px solid {accent_light};\n"
-        f"border-right: 2px solid {accent_light};"
-    )
+    """Generate the layered Wired stylesheet used across every dialog."""
+    colors = surface_colors(bg_color, accent_color)
 
     style_sheet = f"""
-        QLineEdit {{
-            background-color: {bg_color.name()};
-            color: {accent_color.name()};
-            border: 1px solid {accent_color.name()};
-            padding: 8px;
+        QMainWindow, QDialog {{
+            background-color: {colors['background']};
+            color: {colors['text']};
         }}
-
-        QLineEdit:hover {{
-            background-color: {bg_color.name()};
-            color: {accent_color.name()};
-        }}
-
-        QCheckBox {{
-            background-color: {bg_color.name()};
-            color: {accent_color.name()};
-            padding: 8px;
-            spacing: 8px;
-        }}
-
-        QCheckBox::indicator {{
-            width: 12px;
-            height: 12px;
-            background: {bg_color.name()};
-            {gradient_border}
-        }}
-
-        QCheckBox::indicator:checked {{
-            background: {accent_color.name()};
-        }}
-
-        QCheckBox::indicator:hover {{
-            {gradient_border_full}
-        }}
-
-        QDialog {{
-            background-color: {bg_color.name()};
-            color: {accent_color.name()};
-        }}
-
-        QListWidget {{
-            background-color: {bg_color.darker(120).name()};
-            color: {accent_color.name()};
-            border-radius: 4px;
-            outline: 0;
-            border: none;
-        }}
-
-        QListWidget::item {{
-            background-color: {bg_color.darker(120).name()};
-            color: {accent_color.name()};
-            border-radius: 4px;
-            padding: 6px;
-        }}
-
-        QListWidget::item:hover {{
-            background-color: {bg_effect.lighter(120).name()};
-            color: {accent_color.name()};
-        }}
-
-        QListWidget::item:selected {{
-            background-color: {bg_effect.lighter(150).name()};
-            color: {accent_color.name()};
-        }}
-
-        QListWidget::item:checked {{
-            background-color: {bg_effect.lighter(200).name()};
-            color: {accent_color.name()};
-            font-weight: bold;
-        }}
-
-        QListWidget::item:checked:selected {{
-            background-color: {bg_effect.lighter(250).name()};
-            color: {accent_color.name()};
-        }}
-
-        QListWidget::indicator {{
-            {gradient_border}
-            border-radius: 4px;
-        }}
-
-        QListWidget::indicator:unchecked {{
-            background-color: {bg_color.name()};
-        }}
-
-        QListWidget::indicator:checked {{
-            background-color: {accent_color.name()};
-        }}
-
-        QListWidget::indicator:hover {{
-            {gradient_border_full}
-        }}
-
-        QPushButton {{
-            background-color: {bg_color.name()};
-            color: {accent_color.name()};
-            padding: 6px 6px;
-            {gradient_border}
-            font-weight: bold;
-        }}
-
-        QPushButton:hover {{
-            background-color: {bg_effect.name()};
-            color: {accent_color.lighter(150).name()};
-            {gradient_border_full}
-        }}
-
-        QPushButton:disabled {{
-            background-color: {disabled_bg.name()};
-            color: {disabled_text.name()};
-            border: 1px solid {disabled_text.name()};
-            font-weight: normal;
-        }}
-
-        QPushButton:disabled:hover {{
-            background-color: {disabled_bg.name()};
-            color: {disabled_text.name()};
+        QWidget#AppRoot, QWidget#MainSurface, QWidget#BottomRegion {{
+            background-color: {colors['background']};
         }}
 
         QLabel {{
-            color: {accent_color.name()};
+            color: {colors['text']};
+            background: transparent;
+        }}
+        QLabel#HeroTitle {{
+            color: {colors['accent_light']};
+            font-size: 20px;
+            font-weight: 700;
+        }}
+        QLabel#EyebrowLabel, QLabel#SectionTitle {{
+            color: {colors['muted']};
+            font-size: 10px;
+            font-weight: 700;
+        }}
+        QLabel#MutedLabel, QLabel#TelemetryLabel {{
+            color: {colors['muted']};
+        }}
+        QLabel#StatusPill {{
+            color: {colors['accent_light']};
+            background-color: {colors['accent_soft']};
+            border: 1px solid {colors['border']};
+            border-radius: 9px;
+            padding: 3px 8px;
+            font-size: 9px;
+            font-weight: 700;
         }}
 
+        QFrame#DropCard, QFrame#ActivityCard, QFrame#QueueCard {{
+            background-color: {colors['surface']};
+            border: 1px solid {colors['border']};
+            border-radius: 11px;
+        }}
+        QFrame#DropCard {{
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:1,
+                stop:0 {colors['surface_alt']},
+                stop:0.52 {colors['surface']},
+                stop:1 {colors['background_deep']}
+            );
+        }}
+        QFrame#DropCard[dropActive="true"] {{
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:1,
+                stop:0 {colors['surface_strong']},
+                stop:1 {colors['accent_soft']}
+            );
+            border: 2px solid {colors['accent']};
+        }}
+        QFrame#ActivityCard {{
+            background-color: {colors['surface_alt']};
+            border-color: {colors['border_hot']};
+        }}
+        QTextEdit#ActivityLog {{
+            background-color: {colors['background_deep']};
+            border-color: {colors['border']};
+            color: {colors['muted']};
+            font-family: monospace;
+            font-size: 10px;
+        }}
+        QListWidget#QueueList {{
+            background-color: {colors['background_deep']};
+        }}
+
+        QLineEdit, QTextEdit, QPlainTextEdit, QComboBox,
+        QSpinBox, QDoubleSpinBox {{
+            background-color: {colors['surface']};
+            color: {colors['text']};
+            border: 1px solid {colors['border']};
+            border-radius: 7px;
+            padding: 8px 10px;
+            selection-background-color: {colors['accent_soft']};
+            selection-color: {colors['accent_light']};
+        }}
+        QLineEdit:hover, QTextEdit:hover, QPlainTextEdit:hover,
+        QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover {{
+            background-color: {colors['surface_alt']};
+            border-color: {colors['border_hot']};
+        }}
+        QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus,
+        QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
+            border: 1px solid {colors['accent']};
+        }}
+        QComboBox::drop-down {{
+            width: 24px;
+            border: none;
+        }}
+        QComboBox QAbstractItemView {{
+            background-color: {colors['surface_alt']};
+            color: {colors['text']};
+            border: 1px solid {colors['border_hot']};
+            selection-background-color: {colors['accent_soft']};
+        }}
+
+        QListWidget, QTreeWidget, QTableWidget {{
+            background-color: {colors['background_deep']};
+            color: {colors['text']};
+            border: 1px solid {colors['border']};
+            border-radius: 8px;
+            outline: none;
+            padding: 4px;
+        }}
+        QListWidget::item, QTreeWidget::item, QTableWidget::item {{
+            color: {colors['text']};
+            border-radius: 6px;
+            padding: 8px;
+            margin: 2px;
+        }}
+        QListWidget::item:hover, QTreeWidget::item:hover,
+        QTableWidget::item:hover {{
+            background-color: {colors['surface_alt']};
+        }}
+        QListWidget::item:selected, QTreeWidget::item:selected,
+        QTableWidget::item:selected {{
+            background-color: {colors['accent_soft']};
+            color: {colors['accent_light']};
+            border-left: 3px solid {colors['accent']};
+        }}
+
+        QPushButton {{
+            background-color: {colors['surface_alt']};
+            color: {colors['accent_light']};
+            border: 1px solid {colors['border']};
+            border-radius: 7px;
+            padding: 8px 14px;
+            min-height: 18px;
+            font-weight: 700;
+        }}
+        QPushButton:hover {{
+            background-color: {colors['surface_strong']};
+            border-color: {colors['accent']};
+            color: {colors['accent_light']};
+        }}
+        QPushButton:pressed {{
+            background-color: {colors['accent_soft']};
+            border-color: {colors['accent_light']};
+        }}
+        QPushButton#PrimaryButton {{
+            background-color: {colors['accent']};
+            color: {colors['accent_text']};
+            border: 1px solid {colors['accent_light']};
+        }}
+        QPushButton#PrimaryButton:hover {{
+            background-color: {colors['accent_light']};
+            color: {colors['accent_text']};
+        }}
+        QPushButton#GhostButton {{
+            background-color: transparent;
+            border-color: {colors['border']};
+            color: {colors['muted']};
+        }}
+        QPushButton#GhostButton:hover {{
+            color: {colors['accent_light']};
+            border-color: {colors['border_hot']};
+        }}
+        QPushButton#DangerButton {{
+            background-color: {colors['danger_surface']};
+            color: {colors['danger']};
+            border-color: {colors['danger']};
+        }}
+        QPushButton#DangerButton:hover {{
+            background-color: {colors['danger']};
+            color: #FFFFFF;
+        }}
+        QPushButton#SmallButton {{
+            padding: 6px 10px;
+            min-height: 16px;
+        }}
+        QPushButton:disabled {{
+            background-color: {colors['surface']};
+            color: {colors['disabled']};
+            border-color: {colors['surface_strong']};
+            font-weight: 500;
+        }}
+
+        QCheckBox, QRadioButton {{
+            color: {colors['text']};
+            background: transparent;
+            padding: 3px 2px;
+            spacing: 8px;
+        }}
+        QCheckBox::indicator, QRadioButton::indicator {{
+            width: 14px;
+            height: 14px;
+            background-color: {colors['background_deep']};
+            border: 1px solid {colors['border_hot']};
+        }}
+        QCheckBox::indicator {{ border-radius: 3px; }}
+        QRadioButton::indicator {{ border-radius: 7px; }}
+        QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
+            background-color: {colors['accent']};
+            border-color: {colors['accent_light']};
+        }}
+        QCheckBox:disabled, QRadioButton:disabled {{
+            color: {colors['muted']};
+        }}
+        QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {{
+            background-color: {colors['surface']};
+            border-color: {colors['disabled']};
+        }}
+
+        QTabWidget::pane {{
+            background-color: {colors['surface']};
+            border: 1px solid {colors['border']};
+            border-radius: 8px;
+            top: -1px;
+        }}
+        QTabBar::tab {{
+            background: transparent;
+            color: {colors['muted']};
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 10px 14px;
+        }}
+        QTabBar::tab:hover {{ color: {colors['accent_light']}; }}
+        QTabBar::tab:selected {{
+            color: {colors['accent_light']};
+            border-bottom-color: {colors['accent']};
+        }}
+
+        QGroupBox {{
+            color: {colors['text']};
+            background-color: {colors['surface']};
+            border: 1px solid {colors['border']};
+            border-radius: 8px;
+            margin-top: 14px;
+            padding: 12px 10px 10px 10px;
+            font-weight: 700;
+        }}
+        QGroupBox::title {{
+            subcontrol-origin: margin;
+            subcontrol-position: top left;
+            left: 10px;
+            padding: 0 6px;
+            color: {colors['accent_light']};
+        }}
+
+        QProgressBar {{
+            background-color: {colors['background_deep']};
+            border: 1px solid {colors['border']};
+            border-radius: 5px;
+            min-height: 9px;
+            max-height: 9px;
+            text-align: center;
+        }}
+        QProgressBar::chunk {{
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:0,
+                stop:0 {colors['accent']},
+                stop:1 {colors['accent_light']}
+            );
+            border-radius: 4px;
+        }}
+
+        QScrollBar:vertical {{
+            background: {colors['background_deep']};
+            width: 10px;
+            margin: 2px;
+            border-radius: 5px;
+        }}
+        QScrollBar::handle:vertical {{
+            background: {colors['border_hot']};
+            min-height: 24px;
+            border-radius: 4px;
+        }}
+        QScrollBar::handle:vertical:hover {{
+            background: {colors['accent']};
+        }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+            height: 0px;
+        }}
+        QScrollBar:horizontal {{
+            background: {colors['background_deep']};
+            height: 10px;
+            margin: 2px;
+            border-radius: 5px;
+        }}
+        QScrollBar::handle:horizontal {{
+            background: {colors['border_hot']};
+            min-width: 24px;
+            border-radius: 4px;
+        }}
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+            width: 0px;
+        }}
+
+        QMenu {{
+            background-color: {colors['surface_alt']};
+            color: {colors['text']};
+            border: 1px solid {colors['border_hot']};
+            border-radius: 6px;
+            padding: 5px;
+        }}
+        QMenu::item {{ padding: 7px 18px; border-radius: 4px; }}
+        QMenu::item:selected {{ background-color: {colors['accent_soft']}; }}
+
         QToolTip {{
-            background-color: {bg_color.name()};
-            color: {accent_color.name()};
-            padding: 6px;
+            background-color: {colors['surface_alt']};
+            color: {colors['accent_light']};
+            border: 1px solid {colors['border_hot']};
+            border-radius: 5px;
+            padding: 6px 8px;
         }}
     """
     app.setStyleSheet(style_sheet)

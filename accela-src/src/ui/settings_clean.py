@@ -1,9 +1,12 @@
 import sys
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -138,7 +141,16 @@ class CleanSettingsDialog(BaseSettingsDialog):
         layout.addWidget(note)
 
         layout.addStretch()
-        self.tab_widget.addTab(tab, "Downloads")
+
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName("SettingsScrollArea")
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        scroll_area.setWidget(tab)
+        self.tab_widget.addTab(scroll_area, "Downloads")
 
     def _apply_capability_state(self, layout, checkbox, capability: dict) -> None:
         if not capability.get("ready", False):

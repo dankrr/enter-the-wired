@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 from utils.helpers import get_base_path
 from utils.settings import get_settings
 from utils.version import app_version
+from .theme import surface_colors
 from .assets import (
     BOOK_SVG,
     GEAR_SVG,
@@ -40,7 +41,7 @@ class ClickableLabel(QLabel):
     ):
         super().__init__(text, parent)
         self.callback = callback
-        self.setStyleSheet("cursor: pointer;")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if self.callback:
@@ -55,7 +56,8 @@ class BottomTitleBar(QFrame):
         super().__init__(parent)
         self.parent_window = parent
         self.drag_pos = None
-        self.setFixedHeight(32)
+        self.setObjectName("BottomTitleBar")
+        self.setFixedHeight(42)
         self.no_previous_state = True
 
         self.navi_label: Optional[QLabel] = None
@@ -78,13 +80,14 @@ class BottomTitleBar(QFrame):
     def _setup_ui(self) -> None:
         """Setup the layout and widgets."""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(5, 0, 5, 0)
-        layout.setSpacing(5)
+        layout.setContentsMargins(12, 0, 10, 0)
+        layout.setSpacing(8)
 
         left_widget = self._create_left_section()
         right_widget = self._create_right_section()
 
-        self.title_label = QLabel("ASSella")
+        self.title_label = QLabel("ACCELA  //  THE WIRED")
+        self.title_label.setObjectName("TitlebarBrand")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
@@ -107,7 +110,7 @@ class BottomTitleBar(QFrame):
             self.parent_window,
             getattr(self.parent_window, "open_credits_dialog", None),
         )
-        version_label.setStyleSheet("color: #888888;")
+        version_label.setObjectName("TitlebarVersion")
         version_label.setToolTip("View credits")
         layout.addWidget(version_label, alignment=Qt.AlignmentFlag.AlignLeft)
 
@@ -145,7 +148,7 @@ class BottomTitleBar(QFrame):
         widget = QWidget()
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
+        layout.setSpacing(4)
         layout.addStretch()
 
         parent = self.parent_window
@@ -200,25 +203,40 @@ class BottomTitleBar(QFrame):
     def _apply_style(self) -> None:
         """Apply style settings from the parent window."""
         settings = get_settings()
-        bg_color = settings.value("background_color", "#000000")
-        accent_color = settings.value("accent_color", "#C06C84")
+        bg_color = getattr(
+            self.parent_window,
+            "background_color",
+            settings.value("background_color", "#000000"),
+        )
+        accent_color = getattr(
+            self.parent_window,
+            "accent_color",
+            settings.value("accent_color", "#C06C84"),
+        )
+        colors = surface_colors(bg_color, accent_color)
 
         self.setStyleSheet(
             f"""
-            QFrame {{
-                background-color: {bg_color};
+            QFrame#BottomTitleBar {{
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {colors['background_deep']},
+                    stop:0.5 {colors['surface']},
+                    stop:1 {colors['background_deep']}
+                );
+                border-top: 1px solid {colors['border']};
             }}
-            QToolTip {{
-                color: {accent_color};
-                background-color: {bg_color};
-                border: 1px solid {accent_color};
-                padding: 2px;
+            QLabel#TitlebarBrand {{
+                color: {colors['accent_light']};
+                font-size: 12px;
+                font-weight: 700;
+            }}
+            QLabel#TitlebarVersion {{
+                color: {colors['muted']};
+                font-size: 9px;
             }}
         """
         )
-
-        if self.title_label:
-            self.title_label.setStyleSheet(f"color: {accent_color}; font-size: 14pt;")
 
     def update_style(self) -> None:
         """Update the style when colors change."""
@@ -229,24 +247,33 @@ class BottomTitleBar(QFrame):
     def _update_button_styles(self) -> None:
         """Update all button styles with custom border and background."""
         settings = get_settings()
-        bg_color = QColor(settings.value("background_color", "#000000"))
-
-        bg_hover = bg_color
-        hover_lightness = 150
-        if bg_color == QColor("#000000"):
-            bg_hover = QColor("#282828")
-            hover_lightness = 120
+        bg_color = QColor(
+            getattr(
+                self.parent_window,
+                "background_color",
+                settings.value("background_color", "#000000"),
+            )
+        )
+        accent_color = QColor(
+            getattr(
+                self.parent_window,
+                "accent_color",
+                settings.value("accent_color", "#C06C84"),
+            )
+        )
+        colors = surface_colors(bg_color, accent_color)
 
         button_style = f"""
             QPushButton {{
-                background-color: {bg_color.name()};
+                background-color: transparent;
                 border: none;
-                border-radius: 3px;
-                padding: 1px;
+                border-radius: 6px;
+                padding: 4px;
             }}
             QPushButton:hover {{
-                background-color: {bg_hover.lighter(hover_lightness).name()};
+                background-color: {colors['surface_strong']};
             }}
+            QPushButton:pressed {{ background-color: {colors['accent_soft']}; }}
         """
 
         buttons = [
@@ -266,7 +293,11 @@ class BottomTitleBar(QFrame):
     def _update_button_colors(self) -> None:
         """Update all SVG button colors to match the current accent color."""
         settings = get_settings()
-        accent_color = settings.value("accent_color", "#C06C84")
+        accent_color = getattr(
+            self.parent_window,
+            "accent_color",
+            settings.value("accent_color", "#C06C84"),
+        )
 
         buttons = [
             (self.minimize_button, MINIMIZE),
@@ -291,17 +322,21 @@ class BottomTitleBar(QFrame):
         try:
             stylesheet = f"""
             QPushButton {{
-                border-radius: 10px;
+                border-radius: 8px;
                 background-color: {color};
-                border: none;
+                border: 2px solid {QColor(color).lighter(135).name()};
+                min-width: 14px;
+                max-width: 14px;
+                min-height: 14px;
+                max-height: 14px;
+                padding: 0;
             }}
             QPushButton:hover {{
-                border: 2px solid {color};
-                background-color: {color};
-                opacity: 0.8;
+                border: 2px solid #FFFFFF;
+                background-color: {QColor(color).lighter(115).name()};
             }}
             QPushButton:pressed {{
-                opacity: 0.6;
+                background-color: {QColor(color).darker(120).name()};
             }}
             """
             button.setStyleSheet(stylesheet)
@@ -352,12 +387,19 @@ class BottomTitleBar(QFrame):
             button.setToolTip(tooltip)
 
             settings = get_settings()
-            accent_color = QColor(settings.value("accent_color", "#C06C84"))
+            accent_color = QColor(
+                getattr(
+                    self.parent_window,
+                    "accent_color",
+                    settings.value("accent_color", "#C06C84"),
+                )
+            )
 
             pixmap = self._build_svg_pixmap(svg_data, accent_color)
             button.setIcon(QIcon(pixmap))
             button.setIconSize(pixmap.size())
-            button.setFixedSize(20, 20)
+            button.setFixedSize(26, 26)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
 
             if on_click:
                 button.clicked.connect(on_click)
@@ -366,7 +408,7 @@ class BottomTitleBar(QFrame):
         except Exception as e:
             logger.error(f"Failed to create SVG button: {e}", exc_info=True)
             fallback_button = QPushButton("X")
-            fallback_button.setFixedSize(20, 20)
+            fallback_button.setFixedSize(26, 26)
             if on_click:
                 fallback_button.clicked.connect(on_click)
             return fallback_button
@@ -378,7 +420,8 @@ class BottomTitleBar(QFrame):
     ) -> QPushButton:
         """Create a simple colored circle button."""
         button = QPushButton()
-        button.setFixedSize(20, 20)
+        button.setFixedSize(18, 18)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
 
         if tooltip_text:
             button.setToolTip(tooltip_text)
