@@ -73,6 +73,7 @@ class TaskManager(QObject):
 
         # Processing state
         self.is_processing = False
+        self.is_download_phase_active = False
         self.is_download_paused = False
         self.is_cancelling = False
         self.current_job: Optional[str] = None
@@ -298,6 +299,7 @@ class TaskManager(QObject):
             "library_mode", False, type=bool
         )
         self.is_cancelling = False
+        self.is_download_phase_active = True
 
         self._last_steamless_success = None
         self._last_slscheevo_success = None
@@ -434,6 +436,7 @@ class TaskManager(QObject):
     def _on_download_task_stopped(self):
         self.download_runner = None
         self.is_awaiting_download_stop = False
+        self.is_download_phase_active = False
         if self.is_cancelling:
             self._finish_cancelled_download()
             return
@@ -441,6 +444,7 @@ class TaskManager(QObject):
 
     def _on_download_worker_finished(self, _result=None):
         """Finish a canceled job when the downloader exits without completion."""
+        self.is_download_phase_active = False
         if self.is_cancelling:
             self._finish_cancelled_download()
 
@@ -449,12 +453,14 @@ class TaskManager(QObject):
         if not self.is_cancelling or not self.is_processing:
             return
 
+        self.is_download_phase_active = False
         if self._delete_files_on_cancel:
             self._cleanup_cancelled_job_files()
         self.job_finished()
 
     def _on_download_complete(self):
         """Handle download completion"""
+        self.is_download_phase_active = False
         if self.is_cancelling:
             self._finish_cancelled_download()
             return
@@ -1648,6 +1654,7 @@ class TaskManager(QObject):
         self.current_job = None
 
         self.is_download_paused = False
+        self.is_download_phase_active = False
         self.main_window.ui_state.pause_button.setVisible(False)
         self.main_window.ui_state.pause_button.setEnabled(False)
         self.main_window.ui_state.cancel_button.setVisible(False)
@@ -1773,6 +1780,7 @@ class TaskManager(QObject):
         """Guard modal cancel prompts from ever targeting a subsequent job."""
         return (
             self.is_processing
+            and self.is_download_phase_active
             and self.download_task is download_task
             and self.current_job == job_path
         )
